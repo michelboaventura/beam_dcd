@@ -1,0 +1,841 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Implement BEAM chunk parser for exports and imports",
+        "description": "Create core module to parse BEAM file chunks using :beam_lib, extracting export and import tables as MFA tuples",
+        "details": "Create BeamDcd.ChunkParser module that wraps :beam_lib.chunks/2 to extract exports and imports from .beam files.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.ChunkParser do\n  @type mfa :: {module(), atom(), arity()}\n  \n  @spec parse_exports(Path.t()) :: {:ok, [mfa()]} | {:error, term()}\n  def parse_exports(beam_file) do\n    case :beam_lib.chunks(beam_file, [:exports]) do\n      {:ok, {module, [{:exports, exports}]}} ->\n        mfas = Enum.map(exports, fn {fun, arity} -> {module, fun, arity} end)\n        {:ok, mfas}\n      {:error, _} = error -> error\n    end\n  end\n  \n  @spec parse_imports(Path.t()) :: {:ok, [mfa()]} | {:error, term()}\n  def parse_imports(beam_file) do\n    case :beam_lib.chunks(beam_file, [:imports]) do\n      {:ok, {_module, [{:imports, imports}]}} ->\n        {:ok, imports}\n      {:error, _} = error -> error\n    end\n  end\n  \n  @spec parse_attributes(Path.t()) :: {:ok, keyword()} | {:error, term()}\n  def parse_attributes(beam_file) do\n    # Extract attributes chunk for behaviour detection\n    case :beam_lib.chunks(beam_file, [:attributes]) do\n      {:ok, {_module, [{:attributes, attrs}]}} -> {:ok, attrs}\n      {:error, _} = error -> error\n    end\n  end\nend\n```\n\nHandle edge cases: missing chunks, corrupted BEAM files, stripped debug info. Use pattern matching for robust error handling.",
+        "testStrategy": "Create fixture BEAM files by compiling test modules with known exports/imports. Test:\n- Valid BEAM file parsing returns correct MFA lists\n- Missing/corrupted BEAM files return appropriate errors\n- Modules with zero exports/imports handled correctly\n- Elixir module name atoms (Elixir.* prefix) parsed correctly\nUse ExUnit with doctests and property-based testing for edge cases.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.ChunkParser module skeleton with type definitions",
+            "description": "Create the base module structure for BeamDcd.ChunkParser with proper module documentation, type definitions for MFA tuples, and function specs for parse_exports/1, parse_imports/1, and parse_attributes/1",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/chunk_parser.ex with:\n- @moduledoc explaining the module's purpose (wrapping :beam_lib for chunk extraction)\n- @type mfa :: {module(), atom(), arity()} definition\n- Function stubs for parse_exports/1, parse_imports/1, parse_attributes/1\n- @spec annotations for all public functions with proper return types: {:ok, [mfa()]} | {:error, term()} for exports/imports, {:ok, keyword()} | {:error, term()} for attributes\n- Helper function specs for any internal utilities needed\nThis establishes the module contract before implementing the logic.",
+            "status": "pending",
+            "testStrategy": "Verify module compiles without errors. Run dialyzer to ensure type specs are valid. Check that module documentation is accessible via `h BeamDcd.ChunkParser` in IEx."
+          },
+          {
+            "id": 2,
+            "title": "Implement parse_exports/1 with :beam_lib.chunks/2 integration",
+            "description": "Implement the parse_exports/1 function to extract the exports chunk from BEAM files and transform it into a list of {module, function, arity} tuples",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement parse_exports/1 using :beam_lib.chunks(beam_file, [:exports]):\n- Convert String beam_file path to charlist if needed (BEAM expects charlists)\n- Pattern match on {:ok, {module, [{:exports, exports}]}} success case\n- Transform exports list from [{fun, arity}] to [{module, fun, arity}] by adding module from result\n- Handle {:error, :beam_lib, reason} error case and normalize to {:error, reason}\n- Handle edge case where beam_file path doesn't exist\n- Handle corrupted BEAM file errors\nThe exports chunk contains [{function_name, arity}] which needs the module name prepended to create proper MFA tuples.",
+            "status": "pending",
+            "testStrategy": "Create test/fixtures/sample_module.ex with known exports (e.g., foo/0, bar/2). Compile to BEAM. Test parse_exports/1 returns correct MFA list. Test with non-existent file returns error. Test with corrupted BEAM file (create invalid binary) returns error. Verify Elixir module atoms (Elixir.SampleModule) are handled correctly."
+          },
+          {
+            "id": 3,
+            "title": "Implement parse_imports/1 with proper error handling",
+            "description": "Implement the parse_imports/1 function to extract the imports chunk from BEAM files and return the list of imported MFA tuples",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement parse_imports/1 using :beam_lib.chunks(beam_file, [:imports]):\n- Convert beam_file path to charlist for :beam_lib compatibility\n- Pattern match on {:ok, {_module, [{:imports, imports}]}} - note imports already come as MFA tuples\n- Return {:ok, imports} directly since imports chunk already contains [{module, function, arity}] format\n- Handle error cases consistently with parse_exports/1\n- Handle modules with no imports (empty list is valid)\n- Add guard for stripped BEAM files where import table might be missing\nImports chunk format differs from exports - it's already a list of {M, F, A} tuples.",
+            "status": "pending",
+            "testStrategy": "Create test/fixtures/importing_module.ex that imports functions from Enum, List, etc. Compile and verify parse_imports/1 returns correct MFA references. Test module with zero imports returns {:ok, []}. Test error handling matches parse_exports/1 behavior. Verify imports from both Erlang modules (:lists) and Elixir modules (Enum) are captured."
+          },
+          {
+            "id": 4,
+            "title": "Implement parse_attributes/1 for behaviour detection",
+            "description": "Implement parse_attributes/1 to extract module attributes needed for detecting behaviours, callbacks, and other metadata used by the entrypoint detection system",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement parse_attributes/1 using :beam_lib.chunks(beam_file, [:attributes]):\n- Extract attributes chunk which contains compile-time module attributes\n- Return attributes as keyword list for easy lookup\n- Key attributes to preserve: :behaviour, :callback, :deprecated, :on_load, :vsn, :moduledoc\n- Handle missing attributes chunk (some stripped BEAM files) by returning {:ok, []}\n- Normalize attribute format - some are single values, some are lists\n- Convert charlist values to strings where appropriate for Elixir compatibility\nAttributes are used by other modules to detect OTP behaviours and framework callbacks.",
+            "status": "pending",
+            "testStrategy": "Create test fixture implementing GenServer behaviour with @behaviour GenServer. Compile and verify parse_attributes/1 returns attributes containing {:behaviour, [:gen_server]} or similar. Test module with @deprecated annotations. Test module without attributes returns empty keyword list. Test attribute normalization works correctly."
+          },
+          {
+            "id": 5,
+            "title": "Add comprehensive error handling and edge case tests",
+            "description": "Add robust error handling for all edge cases including missing chunks, corrupted files, stripped debug info, and non-existent paths. Create comprehensive test suite covering all error scenarios.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Enhance all three parse functions with:\n- File.exists?/1 check before calling :beam_lib (better error messages)\n- Normalize all :beam_lib errors to consistent {:error, reason} format\n- Add @doc examples showing both success and error cases\n- Handle :beam_lib errors: :invalid_beam, :not_a_beam_file, :missing_chunk, :encrypted_abstract_code\n- Add helper function normalize_beam_path/1 to convert String to charlist\n- Add helper function format_error/1 to make error messages user-friendly\n- Create test fixtures: corrupted BEAM, stripped BEAM, missing file\n- Add property-based test: any valid compiled BEAM should parse without crashing\nComplete the module with production-ready error handling.",
+            "status": "pending",
+            "testStrategy": "Test suite covering: non-existent file path, invalid BEAM file (random binary), BEAM file with missing chunks, file permission errors. Create fixtures by compiling with different Mix/Erlang compiler flags (--no-debug-info). Verify error messages are clear and actionable. Run mix test with coverage to ensure all error branches tested. Test with real-world BEAM files from OTP stdlib."
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Implement bytecode disassembler for call instruction extraction",
+        "description": "Create module to disassemble BEAM bytecode using :beam_disasm and extract all MFA references from call-related opcodes",
+        "details": "Create BeamDcd.Disassembler module that uses :beam_disasm.file/1 to scan instruction streams.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.Disassembler do\n  @type mfa :: {module(), atom(), arity()}\n  \n  @call_opcodes [\n    :call_ext, :call_ext_only, :call_ext_last,\n    :bif0, :bif1, :bif2, :gc_bif,\n    :make_fun2, :make_fun3\n  ]\n  \n  @spec extract_references(Path.t()) :: {:ok, [mfa()]} | {:error, term()}\n  def extract_references(beam_file) do\n    case :beam_disasm.file(to_charlist(beam_file)) do\n      {:beam_file, _module, _exports, _attrs, functions, _labels} ->\n        references = \n          functions\n          |> Enum.flat_map(&scan_function_instructions/1)\n          |> Enum.uniq()\n        {:ok, references}\n      {:error, _} = error -> error\n    end\n  end\n  \n  defp scan_function_instructions({_function, _arity, _entry, instructions}) do\n    instructions\n    |> Enum.flat_map(&extract_mfa_from_instruction/1)\n  end\n  \n  defp extract_mfa_from_instruction(instruction) do\n    case instruction do\n      {:call_ext, _arity, {:extfunc, mod, fun, ar}} -> [{mod, fun, ar}]\n      {:call_ext_only, _arity, {:extfunc, mod, fun, ar}} -> [{mod, fun, ar}]\n      {:call_ext_last, _arity, {:extfunc, mod, fun, ar}, _dealloc} -> [{mod, fun, ar}]\n      {:make_fun2, {mod, fun, ar}, _idx, _old_uniq, _num_free} -> [{mod, fun, ar}]\n      {:make_fun3, {mod, fun, ar}, _idx, _old_uniq, _num_free} -> [{mod, fun, ar}]\n      {:bif, _name, _fail, _args, {:extfunc, mod, fun, ar}} -> [{mod, fun, ar}]\n      _ -> []\n    end\n  end\nend\n```\n\nHandle local calls by resolving against module's own exports when needed.",
+        "testStrategy": "Compile test modules with various call patterns:\n- External calls (call_ext)\n- Tail calls (call_ext_only, call_ext_last)\n- Fun captures (make_fun2/make_fun3)\n- BIF calls\n- Local-to-exported calls\nVerify all MFA references are extracted correctly. Test with OTP 24+ for make_fun3 support.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.Disassembler module with basic structure and types",
+            "description": "Set up the BeamDcd.Disassembler module file with module documentation, type definitions for MFA tuples, and module attributes for call opcodes.",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/disassembler.ex with:\n- Module documentation explaining the bytecode disassembly approach\n- @type mfa :: {module(), atom(), arity()} type definition\n- @call_opcodes module attribute listing all relevant opcodes: :call_ext, :call_ext_only, :call_ext_last, :bif0, :bif1, :bif2, :gc_bif, :make_fun2, :make_fun3\n- @moduledoc with examples of usage\n- Function stubs for extract_references/1, scan_function_instructions/1, and extract_mfa_from_instruction/1",
+            "status": "pending",
+            "testStrategy": null
+          },
+          {
+            "id": 2,
+            "title": "Implement extract_references/1 with :beam_disasm.file/1 integration",
+            "description": "Implement the main extract_references/1 function that calls :beam_disasm.file/1 to disassemble BEAM files and orchestrate MFA extraction.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement extract_references/1 to:\n- Convert beam_file path to charlist using to_charlist/1\n- Call :beam_disasm.file/1 and pattern match on {:beam_file, module, exports, attrs, functions, labels} tuple\n- Handle error cases with {:error, _} pattern and return {:error, term()}\n- Extract functions list and pass to scan_function_instructions/1\n- Collect all MFA references using Enum.flat_map/2\n- Apply Enum.uniq/1 to deduplicate MFA tuples\n- Return {:ok, [mfa()]} on success",
+            "status": "pending",
+            "testStrategy": "Unit test with a simple compiled BEAM file that has known external calls. Verify the function returns {:ok, list} for valid files and {:error, reason} for invalid/missing files."
+          },
+          {
+            "id": 3,
+            "title": "Implement scan_function_instructions/1 for instruction traversal",
+            "description": "Create the helper function that processes a single function's instruction list and extracts all MFA references from its instructions.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement scan_function_instructions/1 to:\n- Accept a function tuple pattern: {function_name, arity, entry_label, instructions}\n- Use Enum.flat_map/2 to iterate over the instructions list\n- Call extract_mfa_from_instruction/1 for each instruction\n- Return a flat list of all MFA tuples found in the function's instruction stream\n- Handle empty instruction lists gracefully",
+            "status": "pending",
+            "testStrategy": "Test with fixture containing multiple functions with varying instruction patterns. Verify all instructions are visited and MFAs are collected correctly."
+          },
+          {
+            "id": 4,
+            "title": "Implement extract_mfa_from_instruction/1 with pattern matching for all call opcodes",
+            "description": "Build the core pattern matching logic to extract MFA tuples from different BEAM instruction formats including call_ext variants, make_fun2/3, and BIF calls.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement extract_mfa_from_instruction/1 with pattern matches for:\n- {:call_ext, arity, {:extfunc, mod, fun, ar}} → [{mod, fun, ar}]\n- {:call_ext_only, arity, {:extfunc, mod, fun, ar}} → [{mod, fun, ar}]\n- {:call_ext_last, arity, {:extfunc, mod, fun, ar}, dealloc} → [{mod, fun, ar}]\n- {:make_fun2, {mod, fun, ar}, idx, old_uniq, num_free} → [{mod, fun, ar}]\n- {:make_fun3, {mod, fun, ar}, idx, old_uniq, num_free} → [{mod, fun, ar}] (OTP 24+)\n- {:bif, name, fail, args, {:extfunc, mod, fun, ar}} → [{mod, fun, ar}] (if BIF has MFA reference)\n- Catch-all pattern _ → [] for non-call instructions\n- Return list (either one-element or empty) for easy flat_map composition",
+            "status": "pending",
+            "testStrategy": "Create test modules with each call type: external calls, tail calls (call_ext_only, call_ext_last), fun captures (both make_fun2 and make_fun3 where supported), and BIF calls. Compile to BEAM and verify each pattern is correctly extracted. Test with OTP 24+ for make_fun3 support."
+          },
+          {
+            "id": 5,
+            "title": "Add comprehensive test suite with varied call pattern fixtures",
+            "description": "Create test/beam_dcd/disassembler_test.exs with ExUnit tests covering all supported instruction types and edge cases.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Create comprehensive test suite:\n- Create test/fixtures/disassembler/ directory for test BEAM files\n- Write test modules with: external module calls, tail-optimized calls, fun captures using &Module.function/arity syntax, local calls to exported functions, BIF calls, multiple call types in one function\n- Compile fixtures in test setup using :compile.file/2 or mix compile\n- Test extract_references/1 returns correct MFA sets for each fixture\n- Test error handling: missing file, corrupted BEAM file, empty module\n- Test deduplication works (same MFA called multiple times)\n- Test with real-world pattern: Phoenix controller calling multiple Ecto functions\n- Verify performance: analyze 100 BEAM files in under 1 second",
+            "status": "pending",
+            "testStrategy": "Run ExUnit test suite with mix test. Verify all call patterns are detected correctly, no false negatives, and error cases are handled gracefully. Use Code.ensure_compiled!/1 to verify test fixtures are available."
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Implement abstract code analyzer for dynamic call detection",
+        "description": "Create optional best-effort analyzer that walks Erlang abstract forms from debug_info to find additional references including literal dynamic calls",
+        "details": "Create BeamDcd.AbstractAnalyzer module for optional enhanced analysis.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.AbstractAnalyzer do\n  @type mfa :: {module(), atom(), arity()}\n  \n  @spec extract_references(Path.t()) :: {:ok, [mfa()], [String.t()]} | {:error, :no_debug_info}\n  def extract_references(beam_file) do\n    case :beam_lib.chunks(beam_file, [:abstract_code]) do\n      {:ok, {_module, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->\n        {mfas, warnings} = walk_abstract_forms(forms)\n        {:ok, Enum.uniq(mfas), warnings}\n      {:ok, {_module, [{:abstract_code, :no_abstract_code}]}} ->\n        {:error, :no_debug_info}\n      {:error, _} ->\n        {:error, :no_debug_info}\n    end\n  end\n  \n  defp walk_abstract_forms(forms) do\n    warnings = []\n    mfas = \n      forms\n      |> Enum.flat_map(&extract_from_form/1)\n    \n    # Detect dynamic dispatch patterns\n    has_apply = Enum.any?(mfas, fn {m, f, _a} -> m == :erlang and f == :apply end)\n    warnings = if has_apply, do: [\"Module uses :erlang.apply/3 - may have false positives\" | warnings], else: warnings\n    \n    {mfas, warnings}\n  end\n  \n  defp extract_from_form({:function, _line, _name, _arity, clauses}) do\n    Enum.flat_map(clauses, &extract_from_clause/1)\n  end\n  defp extract_from_form(_), do: []\n  \n  defp extract_from_clause({:clause, _line, _patterns, _guards, body}) do\n    Enum.flat_map(body, &extract_from_expr/1)\n  end\n  \n  defp extract_from_expr({:call, _line, {:remote, _line2, {:atom, _l3, mod}, {:atom, _l4, fun}}, args}) do\n    [{mod, fun, length(args)}]\n  end\n  defp extract_from_expr({:call, _line, _fun, args}) do\n    # Recursively walk args\n    Enum.flat_map(args, &extract_from_expr/1)\n  end\n  defp extract_from_expr(tuple) when is_tuple(tuple) do\n    tuple |> Tuple.to_list() |> Enum.flat_map(&extract_from_expr/1)\n  end\n  defp extract_from_expr(list) when is_list(list) do\n    Enum.flat_map(list, &extract_from_expr/1)\n  end\n  defp extract_from_expr(_), do: []\nend\n```",
+        "testStrategy": "Test with BEAM files compiled with and without debug_info:\n- Files with debug_info return additional references\n- Files without debug_info return {:error, :no_debug_info}\n- Detect :erlang.apply/3 usage and return warnings\n- Verify literal dynamic calls are captured\nCompile fixtures with `mix compile --debug-info` and without.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.AbstractAnalyzer module file with basic structure",
+            "description": "Create the lib/beam_dcd/abstract_analyzer.ex file with module definition, type specifications, and module documentation",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/abstract_analyzer.ex with:\n- Module definition: defmodule BeamDcd.AbstractAnalyzer\n- @moduledoc describing the purpose: optional best-effort analyzer for dynamic call detection\n- @type mfa :: {module(), atom(), arity()} type definition\n- Module structure with empty function stubs for extract_references/1\n- Basic file organization following Elixir conventions",
+            "status": "pending",
+            "testStrategy": "Verify file is created with correct module name, compiles without errors using 'mix compile', and contains proper module structure with type definitions"
+          },
+          {
+            "id": 2,
+            "title": "Implement BEAM abstract code chunk extraction logic",
+            "description": "Implement the extract_references/1 function to read and validate abstract_code chunks from BEAM files using :beam_lib",
+            "dependencies": [
+              1
+            ],
+            "details": "In extract_references/1:\n- Use :beam_lib.chunks(beam_file, [:abstract_code]) to read chunks\n- Pattern match on {:ok, {_module, [{:abstract_code, {:raw_abstract_v1, forms}}]}} for success case\n- Handle {:ok, {_module, [{:abstract_code, :no_abstract_code}]}} by returning {:error, :no_debug_info}\n- Handle {:error, _} cases by returning {:error, :no_debug_info}\n- Call walk_abstract_forms/1 with the forms when available\n- Return {:ok, mfas, warnings} tuple with unique MFAs and warning list",
+            "status": "pending",
+            "testStrategy": "Test with fixture BEAM files compiled with +debug_info and without. Verify: (1) Files with debug_info return {:ok, mfas, warnings}, (2) Files without return {:error, :no_debug_info}, (3) Corrupted files handled gracefully"
+          },
+          {
+            "id": 3,
+            "title": "Implement abstract form traversal and MFA extraction",
+            "description": "Create walk_abstract_forms/1 and helper functions to recursively traverse Erlang abstract forms and extract MFA references",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement private functions:\n- walk_abstract_forms/1: Initialize warnings list, flat_map over forms with extract_from_form/1, collect all MFAs, return {mfas, warnings} tuple\n- extract_from_form/1: Pattern match on {:function, _, _, _, clauses} tuples, flat_map over clauses with extract_from_clause/1\n- extract_from_clause/1: Pattern match on {:clause, _, _, _, body}, flat_map over body expressions\n- extract_from_expr/1: Recursively extract MFAs from nested expression tuples and lists\n- Handle tuple and list recursion in extract_from_expr/1 for complete AST traversal",
+            "status": "pending",
+            "testStrategy": "Test with fixture modules containing: nested function calls, guard expressions, case/if/receive blocks, list comprehensions. Verify all remote calls are extracted and local calls are ignored"
+          },
+          {
+            "id": 4,
+            "title": "Implement remote call detection from abstract syntax",
+            "description": "Add pattern matching in extract_from_expr/1 to detect and extract remote call instructions from abstract forms",
+            "dependencies": [
+              3
+            ],
+            "details": "In extract_from_expr/1, add pattern matching for:\n- {:call, _, {:remote, _, {:atom, _, mod}, {:atom, _, fun}}, args} to detect remote calls\n- Extract module name (mod), function name (fun), and arity (length(args))\n- Return [{mod, fun, length(args)}] for each remote call found\n- Ensure args are recursively traversed to catch nested calls\n- Base case: extract_from_expr(_) returns [] for non-matching patterns\n- This captures literal dynamic calls like Module.function() where both module and function are compile-time atoms",
+            "status": "pending",
+            "testStrategy": "Compile test fixtures with explicit remote calls: Enum.map/2, String.upcase/1, :erlang.apply/3. Verify each call is extracted with correct module, function, and arity. Test with nested calls and calls in complex expressions"
+          },
+          {
+            "id": 5,
+            "title": "Implement dynamic dispatch warning detection",
+            "description": "Add logic to detect :erlang.apply/3 usage and generate appropriate warnings for dynamic dispatch patterns",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "In walk_abstract_forms/1, after collecting MFAs:\n- Check if any MFA matches {m, f, _a} where m == :erlang and f == :apply\n- If found, prepend warning: \"Module uses :erlang.apply/3 - may have false positives\"\n- Ensure warnings are included in the {:ok, mfas, warnings} return tuple\n- Use Enum.uniq/1 on mfas before returning to eliminate duplicates\n- Keep warnings list structure for future expansion (other dynamic patterns, spawn calls, etc.)",
+            "status": "pending",
+            "testStrategy": "Create fixture BEAM with :erlang.apply/3 calls and verify warning is returned. Test module without apply/3 returns empty warnings list. Verify warning message is exactly as specified for CI/tooling integration"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Create reference collector with multi-layer strategy",
+        "description": "Build orchestration module that combines import tables, bytecode disassembly, and abstract code analysis to compute complete set of used functions",
+        "details": "Create BeamDcd.ReferenceCollector that coordinates all three analysis layers.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.ReferenceCollector do\n  alias BeamDcd.{ChunkParser, Disassembler, AbstractAnalyzer}\n  \n  @type mfa :: {module(), atom(), arity()}\n  @type analysis_result :: %{\n    used_functions: MapSet.t(mfa()),\n    warnings: [String.t()],\n    dynamic_dispatch_detected: boolean()\n  }\n  \n  @spec collect(Path.t()) :: {:ok, analysis_result()} | {:error, term()}\n  def collect(beam_file) do\n    with {:ok, layer_a} <- ChunkParser.parse_imports(beam_file),\n         {:ok, layer_b} <- Disassembler.extract_references(beam_file) do\n      \n      # Layer C is optional\n      {layer_c, warnings} = case AbstractAnalyzer.extract_references(beam_file) do\n        {:ok, refs, warns} -> {refs, warns}\n        {:error, :no_debug_info} -> {[], []}\n      end\n      \n      # Union of all layers\n      used = MapSet.new(layer_a ++ layer_b ++ layer_c)\n      \n      result = %{\n        used_functions: used,\n        warnings: warnings,\n        dynamic_dispatch_detected: Enum.any?(warnings, &String.contains?(&1, \"apply\"))\n      }\n      \n      {:ok, result}\n    end\n  end\n  \n  @spec collect_batch([Path.t()]) :: %{Path.t() => analysis_result()}\n  def collect_batch(beam_files) do\n    beam_files\n    |> Task.async_stream(&{&1, collect(&1)}, timeout: 30_000)\n    |> Enum.reduce(%{}, fn {:ok, {path, result}}, acc ->\n      case result do\n        {:ok, data} -> Map.put(acc, path, data)\n        {:error, _} -> acc\n      end\n    end)\n  end\nend\n```",
+        "testStrategy": "Integration tests with complete BEAM files:\n- Verify all three layers contribute to final used set\n- Test that layer union doesn't duplicate MFAs\n- Benchmark parallel processing with Task.async_stream\n- Test with 500+ BEAM files to ensure <10s performance\n- Verify warnings propagate correctly",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.ReferenceCollector module with type definitions and structure",
+            "description": "Set up the BeamDcd.ReferenceCollector module file with module documentation, type definitions for MFA tuples and analysis results, and function stubs for the main API.",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/reference_collector.ex with:\n- Module definition and @moduledoc explaining the multi-layer orchestration strategy\n- @type mfa :: {module(), atom(), arity()} type definition\n- @type analysis_result :: %{used_functions: MapSet.t(mfa()), warnings: [String.t()], dynamic_dispatch_detected: boolean()} type definition\n- Function stubs for collect/1 and collect_batch/1 with @spec annotations\n- Alias statements for BeamDcd.{ChunkParser, Disassembler, AbstractAnalyzer}\n- Document the three-layer strategy: Layer A (import tables), Layer B (bytecode disassembly), Layer C (abstract code analysis)",
+            "status": "pending",
+            "testStrategy": "Verify module compiles without errors using mix compile. Run dialyzer to ensure type specs are valid. Check that module documentation is accessible via `h BeamDcd.ReferenceCollector` in IEx. Confirm all aliases resolve correctly."
+          },
+          {
+            "id": 2,
+            "title": "Implement collect/1 function with three-layer orchestration",
+            "description": "Implement the main collect/1 function that coordinates all three analysis layers (ChunkParser for imports, Disassembler for bytecode, AbstractAnalyzer for abstract code) and merges their results into a unified set of used functions.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement collect/1 using with statement for sequential layer execution:\n- Call ChunkParser.parse_imports/1 to get Layer A (import table references)\n- Call Disassembler.extract_references/1 to get Layer B (bytecode call instructions)\n- Call AbstractAnalyzer.extract_references/1 for Layer C, handling both success {:ok, refs, warns} and error {:error, :no_debug_info} cases\n- For Layer C errors, use empty list [] for refs and warnings to make it truly optional\n- Merge all three layers using list concatenation (layer_a ++ layer_b ++ layer_c)\n- Use MapSet.new/1 to create a deduplicated union of all MFA tuples\n- Build analysis_result map with :used_functions (MapSet), :warnings (list from Layer C), and :dynamic_dispatch_detected (boolean based on warnings)\n- Return {:ok, analysis_result} on success, propagate {:error, term()} from Layer A or B failures",
+            "status": "pending",
+            "testStrategy": "Create test fixtures with known function references across all three layers. Test with BEAM files that have: (1) import table entries, (2) bytecode call instructions, (3) abstract code available. Verify all three layers contribute to final used set. Test with BEAM file missing debug_info to ensure Layer C gracefully degrades. Verify MapSet deduplication works when same MFA appears in multiple layers. Test error propagation from ChunkParser and Disassembler."
+          },
+          {
+            "id": 3,
+            "title": "Implement dynamic dispatch detection logic",
+            "description": "Add logic to detect dynamic dispatch patterns (like :erlang.apply/3 usage) from Layer C warnings and set the dynamic_dispatch_detected flag appropriately.",
+            "dependencies": [
+              2
+            ],
+            "details": "In the collect/1 function, after collecting warnings from Layer C:\n- Use Enum.any?/2 to check if any warning string contains the substring \"apply\"\n- This detects :erlang.apply/3 usage flagged by AbstractAnalyzer\n- Set :dynamic_dispatch_detected field in the analysis_result map to true if found, false otherwise\n- Ensure warnings list is preserved in the result for user inspection\n- Document that dynamic dispatch detection relies on Layer C (abstract code analysis) and may not detect all cases if debug_info is stripped\n- The flag helps users understand when results might contain false positives",
+            "status": "pending",
+            "testStrategy": "Create test fixture module that uses :erlang.apply/3 or apply/3. Compile with debug_info and verify: (1) warning is present in warnings list, (2) dynamic_dispatch_detected is true. Test module without apply/3 returns dynamic_dispatch_detected: false. Test module compiled without debug_info (Layer C fails) returns dynamic_dispatch_detected: false and empty warnings."
+          },
+          {
+            "id": 4,
+            "title": "Implement collect_batch/1 for parallel BEAM file processing",
+            "description": "Create the collect_batch/1 function that processes multiple BEAM files in parallel using Task.async_stream, aggregating all analysis results into a map keyed by file path.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement collect_batch/1 to process a list of BEAM file paths:\n- Use Task.async_stream/3 with the transformation &{&1, collect(&1)} to create {path, result} tuples\n- Set timeout to 30_000ms (30 seconds) to handle large BEAM files\n- Use Enum.reduce/3 to accumulate results into a map\n- Pattern match on {:ok, {path, result}} from async_stream\n- For successful collect/1 results ({:ok, data}), add to map with Map.put(acc, path, data)\n- For failed collect/1 results ({:error, _}), skip and continue (don't add to map)\n- Return map of %{Path.t() => analysis_result()} containing only successfully analyzed files\n- This enables parallel processing of 500+ BEAM files with good performance",
+            "status": "pending",
+            "testStrategy": "Create test with multiple fixture BEAM files (5-10 files). Call collect_batch/1 and verify: (1) all files are processed, (2) results map contains correct number of entries, (3) each entry has correct structure. Test with mix of valid and invalid BEAM files to ensure error handling (invalid files skipped). Benchmark with 100+ BEAM files to verify parallel processing improves performance vs sequential. Verify timeout setting prevents hanging on corrupted files."
+          },
+          {
+            "id": 5,
+            "title": "Add comprehensive integration tests and documentation",
+            "description": "Create test/beam_dcd/reference_collector_test.exs with comprehensive test coverage for all layer combinations, error scenarios, and performance benchmarks. Add usage examples to module documentation.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Create comprehensive ExUnit test suite:\n- Test single file analysis with all three layers contributing references\n- Test Layer C optional behavior: works with and without debug_info\n- Test deduplication: same MFA in multiple layers appears once in result\n- Test batch processing with collect_batch/1: verify parallel execution, error isolation\n- Test error propagation from Layer A (ChunkParser) and Layer B (Disassembler)\n- Test dynamic dispatch detection flag with apply/3 usage\n- Performance benchmark: process 50+ fixture BEAM files in under 5 seconds\n- Add @moduledoc examples showing typical usage patterns for both collect/1 and collect_batch/1\n- Document the layered approach and explain when each layer contributes\n- Add @doc annotations to all public functions with parameter descriptions and return value explanations",
+            "status": "pending",
+            "testStrategy": "Run full test suite with mix test. Verify all test cases pass. Check code coverage with mix test --cover to ensure >90% coverage of the module. Run dialyzer to verify no type errors. Verify @doc examples are valid with doctest. Test against real-world BEAM files from OTP stdlib to ensure robustness. Benchmark parallel processing to ensure <10s for 500 BEAM files target is achievable."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Implement entrypoint and callback detection system",
+        "description": "Create module to identify and filter compiler-generated functions, OTP behaviour callbacks, and framework-specific entrypoints",
+        "details": "Create BeamDcd.EntrypointDetector with automatic filtering and behaviour callback detection.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.EntrypointDetector do\n  @type mfa :: {module(), atom(), arity()}\n  \n  @compiler_generated [\n    {:module_info, 0}, {:module_info, 1},\n    {:__info__, 1}, {:behaviour_info, 1},\n    {:__impl__, 1}, {:__struct__, 0}, {:__struct__, 1},\n    {:__changeset__, 0}\n  ]\n  \n  @otp_behaviours %{\n    :gen_server => [{:init, 1}, {:handle_call, 3}, {:handle_cast, 2}, {:handle_info, 2}, {:terminate, 2}, {:code_change, 3}],\n    :gen_statem => [{:init, 1}, {:callback_mode, 0}, {:terminate, 3}, {:code_change, 4}],\n    :supervisor => [{:init, 1}],\n    :application => [{:start, 2}, {:stop, 1}],\n    Application => [{:start, 2}, {:stop, 1}],\n    GenServer => [{:init, 1}, {:handle_call, 3}, {:handle_cast, 2}, {:handle_info, 2}, {:terminate, 2}, {:code_change, 3}],\n    Supervisor => [{:init, 1}],\n    # Phoenix behaviours\n    Phoenix.Controller => [],\n    Phoenix.LiveView => [{:mount, 3}, {:render, 1}, {:handle_event, 3}, {:handle_params, 3}, {:handle_info, 2}, {:handle_async, 3}],\n    Plug => [{:init, 1}, {:call, 2}]\n  }\n  \n  @spec is_compiler_generated?(mfa()) :: boolean()\n  def is_compiler_generated?({_module, function, arity}) do\n    {function, arity} in @compiler_generated or\n    String.starts_with?(to_string(function), \"MACRO-\")\n  end\n  \n  @spec detect_behaviours(Path.t()) :: {:ok, [module()]} | {:error, term()}\n  def detect_behaviours(beam_file) do\n    case :beam_lib.chunks(beam_file, [:attributes]) do\n      {:ok, {_module, [{:attributes, attrs}]}} ->\n        behaviours = \n          attrs\n          |> Keyword.get_values(:behaviour)\n          |> List.flatten()\n        {:ok, behaviours}\n      {:error, _} = error -> error\n    end\n  end\n  \n  @spec get_behaviour_callbacks([module()]) :: [mfa()]\n  def get_behaviour_callbacks(behaviours) do\n    behaviours\n    |> Enum.flat_map(fn behaviour ->\n      case Map.get(@otp_behaviours, behaviour) do\n        nil -> []\n        callbacks -> callbacks\n      end\n    end)\n  end\n  \n  @spec is_entrypoint?(mfa(), [module()], keyword()) :: boolean()\n  def is_entrypoint?(mfa, behaviours, config \\\\ []) do\n    extra_entrypoints = Keyword.get(config, :extra_entrypoints, [])\n    \n    is_compiler_generated?(mfa) or\n    mfa in get_behaviour_callbacks(behaviours) or\n    mfa in extra_entrypoints or\n    is_on_load_function?(mfa)\n  end\n  \n  defp is_on_load_function?({_mod, :on_load, 0}), do: true\n  defp is_on_load_function?(_), do: false\nend\n```",
+        "testStrategy": "Test with fixture modules:\n- GenServer implementation → callbacks excluded\n- Phoenix LiveView → LiveView callbacks excluded\n- Plug module → init/1 and call/2 excluded\n- Compiler-generated functions filtered\n- MACRO- prefixed functions filtered\n- Custom extra_entrypoints from config respected\nCompile test behaviours and verify attribute chunk parsing.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create EntrypointDetector module with basic structure and type definitions",
+            "description": "Set up the BeamDcd.EntrypointDetector module file with module documentation, type definitions, and compiler-generated function list constant",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/entrypoint_detector.ex with:\n- Module definition: defmodule BeamDcd.EntrypointDetector\n- @moduledoc explaining the module's purpose for detecting and filtering entrypoints\n- @type mfa :: {module(), atom(), arity()} type definition\n- @compiler_generated module attribute containing list of tuples: module_info/0, module_info/1, __info__/1, behaviour_info/1, __impl__/1, __struct__/0, __struct__/1, __changeset__/0\n- Create lib/beam_dcd/ directory if it doesn't exist\n- Follow Elixir formatting conventions per .formatter.exs",
+            "status": "pending",
+            "testStrategy": "Verify file is created in correct location with valid Elixir syntax. Test that module can be compiled with mix compile. Ensure @compiler_generated constant is accessible and contains all 8 expected function signatures."
+          },
+          {
+            "id": 2,
+            "title": "Implement compiler-generated function detection",
+            "description": "Add is_compiler_generated?/1 function to identify Erlang and Elixir compiler-generated functions including MACRO- prefixed exports",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement in lib/beam_dcd/entrypoint_detector.ex:\n- @spec is_compiler_generated?(mfa()) :: boolean()\n- Function def is_compiler_generated?({_module, function, arity})\n- Check if {function, arity} tuple is in @compiler_generated list\n- Check if function name (converted to string via to_string/1) starts with \"MACRO-\" prefix\n- Use or operator to combine both conditions\n- Pattern match on the MFA tuple to extract function and arity",
+            "status": "pending",
+            "testStrategy": "Unit test with fixture MFAs:\n- {MyModule, :module_info, 0} returns true\n- {MyModule, :__struct__, 0} returns true\n- {MyModule, :\"MACRO-my_macro\", 2} returns true\n- {MyModule, :regular_function, 1} returns false\n- Test all 8 compiler-generated functions from the constant"
+          },
+          {
+            "id": 3,
+            "title": "Implement BEAM behaviour detection via chunk parsing",
+            "description": "Add detect_behaviours/1 function that extracts behaviour declarations from BEAM file attributes chunk using :beam_lib",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement in lib/beam_dcd/entrypoint_detector.ex:\n- @spec detect_behaviours(Path.t()) :: {:ok, [module()]} | {:error, term()}\n- Function def detect_behaviours(beam_file)\n- Call :beam_lib.chunks(beam_file, [:attributes]) to extract attributes chunk\n- Pattern match on {:ok, {_module, [{:attributes, attrs}]}} for success case\n- Use Keyword.get_values(attrs, :behaviour) to extract all :behaviour attribute values\n- Use List.flatten/1 to flatten nested behaviour lists (modules can declare multiple behaviours)\n- Return {:ok, behaviours_list}\n- Handle {:error, _} = error case by returning error tuple as-is",
+            "status": "pending",
+            "testStrategy": "Compile test fixture modules:\n- GenServer module declaring @behaviour GenServer → returns {:ok, [GenServer]}\n- Module with multiple behaviours → returns flattened list\n- Module with no behaviours → returns {:ok, []}\n- Invalid/missing BEAM file → returns {:error, reason}\n- Test with both Elixir (@behaviour) and Erlang (-behaviour) syntax"
+          },
+          {
+            "id": 4,
+            "title": "Implement OTP and framework behaviour callback mapping",
+            "description": "Add @otp_behaviours constant map and get_behaviour_callbacks/1 function to map behaviour modules to their required callback MFA signatures",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement in lib/beam_dcd/entrypoint_detector.ex:\n- @otp_behaviours module attribute as map with behaviour module atoms as keys\n- Map entries: :gen_server, :gen_statem, :supervisor, :application, Application, GenServer, Supervisor (both Erlang and Elixir atoms)\n- For GenServer/gen_server: [{:init, 1}, {:handle_call, 3}, {:handle_cast, 2}, {:handle_info, 2}, {:terminate, 2}, {:code_change, 3}]\n- For supervisor/Supervisor: [{:init, 1}]\n- For application/Application: [{:start, 2}, {:stop, 1}]\n- Framework behaviours: Phoenix.Controller (empty list), Phoenix.LiveView with mount/3, render/1, handle_event/3, handle_params/3, handle_info/2, handle_async/3, and Plug with init/1, call/2\n- @spec get_behaviour_callbacks([module()]) :: [mfa()]\n- Function that flat_maps over behaviour list, looks up each in @otp_behaviours map, returns callbacks or empty list if not found",
+            "status": "pending",
+            "testStrategy": "Test callback mapping:\n- [GenServer] → returns 6 callback tuples\n- [:gen_server, :supervisor] → returns combined callbacks from both\n- [UnknownBehaviour] → returns []\n- [] → returns []\n- Verify Phoenix.LiveView returns all 6 LiveView callbacks\n- Verify Plug returns init/1 and call/2"
+          },
+          {
+            "id": 5,
+            "title": "Implement main entrypoint detection function with configuration support",
+            "description": "Add is_entrypoint?/3 function that orchestrates all detection logic with support for extra_entrypoints configuration and on_load function detection",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Implement in lib/beam_dcd/entrypoint_detector.ex:\n- @spec is_entrypoint?(mfa(), [module()], keyword()) :: boolean()\n- Function def is_entrypoint?(mfa, behaviours, config \\\\ [])\n- Extract extra_entrypoints from config using Keyword.get(config, :extra_entrypoints, [])\n- Combine four conditions with or: is_compiler_generated?(mfa), mfa in get_behaviour_callbacks(behaviours), mfa in extra_entrypoints, is_on_load_function?(mfa)\n- Private helper defp is_on_load_function?({_mod, :on_load, 0}), do: true\n- Private helper defp is_on_load_function?(_), do: false\n- Ensure proper guard clause handling for when behaviours list is empty",
+            "status": "pending",
+            "testStrategy": "Integration tests combining all detection layers:\n- GenServer module: init/1 returns true, random_function/0 returns false\n- Module with @on_load attribute: on_load/0 returns true\n- Function in extra_entrypoints config returns true\n- MACRO- function returns true via compiler-generated check\n- Phoenix.LiveView: mount/3 returns true\n- Regular exported function with no special status returns false\n- Test with empty behaviours list and empty config"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Build configuration system with file and CLI support",
+        "description": "Create configuration loader that supports .beam_unused.exs config files and command-line flag overrides",
+        "details": "Create BeamDcd.Config module with schema validation and defaults.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.Config do\n  @type t :: %__MODULE__{\n    beam_paths: [String.t()],\n    exclude_deps: boolean(),\n    include_test: boolean(),\n    ignore_modules: [Regex.t() | atom()],\n    ignore_functions: [mfa()],\n    extra_entrypoints: [mfa()],\n    treat_test_as_caller: boolean(),\n    output_format: :text | :json | :github | :sarif,\n    severity: :definite | :probable\n  }\n  \n  defstruct [\n    beam_paths: [\"_build/dev/lib/*/ebin\"],\n    exclude_deps: true,\n    include_test: false,\n    ignore_modules: [],\n    ignore_functions: [],\n    extra_entrypoints: [],\n    treat_test_as_caller: true,\n    output_format: :text,\n    severity: :definite\n  ]\n  \n  @spec load(Path.t() | nil) :: {:ok, t()} | {:error, term()}\n  def load(config_path \\\\ nil) do\n    config_file = config_path || \".beam_unused.exs\"\n    \n    base_config = %__MODULE__{}\n    \n    if File.exists?(config_file) do\n      case Code.eval_file(config_file) do\n        {config_map, _bindings} when is_map(config_map) ->\n          {:ok, merge(base_config, config_map)}\n        {config_list, _bindings} when is_list(config_list) ->\n          {:ok, merge(base_config, Map.new(config_list))}\n        _ ->\n          {:error, \"Invalid config file format\"}\n      end\n    else\n      {:ok, base_config}\n    end\n  end\n  \n  @spec merge(t(), map()) :: t()\n  defp merge(config, overrides) do\n    Map.merge(config, overrides, fn _k, v1, v2 -> v2 || v1 end)\n  end\n  \n  @spec apply_cli_flags(t(), keyword()) :: t()\n  def apply_cli_flags(config, flags) do\n    Enum.reduce(flags, config, fn {key, value}, acc ->\n      case key do\n        :format -> %{acc | output_format: value}\n        :include_deps -> %{acc | exclude_deps: not value}\n        :strict -> acc  # handled at CLI level\n        :config -> acc  # already processed\n        _ -> acc\n      end\n    end)\n  end\nend\n```",
+        "testStrategy": "Unit tests for:\n- Default config values\n- Loading .beam_unused.exs files with various formats\n- CLI flag overrides\n- Invalid config file handling\n- Regex pattern compilation for ignore_modules\nTest merge precedence: defaults < config file < CLI flags",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.Config module with struct and type definitions",
+            "description": "Define the Config module structure with all configuration fields, types, and default values according to the PRD specifications",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/config.ex with the @type t definition containing all fields: beam_paths (defaults to [\"_build/dev/lib/*/ebin\"]), exclude_deps (true), include_test (false), ignore_modules ([]), ignore_functions ([]), extra_entrypoints ([]), treat_test_as_caller (true), output_format (:text), and severity (:definite). Define the defstruct with these same defaults. Include proper typespec annotations for mfa() type as {module(), atom(), arity()}.",
+            "status": "pending",
+            "testStrategy": "Unit test that verifies default struct values match PRD requirements. Test that %BeamDcd.Config{} returns expected defaults for all fields."
+          },
+          {
+            "id": 2,
+            "title": "Implement config file loading from .beam_unused.exs",
+            "description": "Create the load/1 function that reads and evaluates .beam_unused.exs configuration files, handling both map and keyword list formats",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement BeamDcd.Config.load/1 that accepts an optional config file path (defaults to \".beam_unused.exs\"). Use File.exists?/1 to check if file exists. If present, use Code.eval_file/1 to evaluate the config file. Handle both map and keyword list return formats by converting keyword lists with Map.new/1. Return {:ok, config} on success or {:error, reason} on failure. If file doesn't exist, return {:ok, %BeamDcd.Config{}} with defaults.",
+            "status": "pending",
+            "testStrategy": "Create test fixtures with valid .beam_unused.exs files in both map and keyword formats. Test loading non-existent files returns defaults. Test invalid config files return appropriate errors. Test custom paths via config_path parameter."
+          },
+          {
+            "id": 3,
+            "title": "Implement merge/2 for combining configs with overrides",
+            "description": "Create private merge function that combines base configuration with user-provided overrides using proper precedence rules",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement private merge/2 function that takes a Config struct and a map of overrides. Use Map.merge/3 with a custom resolver function that prefers non-nil override values over base config values (fn _k, v1, v2 -> v2 || v1 end). This ensures nil values in overrides don't erase defaults. Return the merged Config struct.",
+            "status": "pending",
+            "testStrategy": "Test that merge preserves base values when overrides are nil. Test that non-nil overrides replace base values. Test partial overrides leave other fields at defaults. Property test with random override maps."
+          },
+          {
+            "id": 4,
+            "title": "Implement apply_cli_flags/2 for command-line flag overrides",
+            "description": "Create function that applies CLI flags as the highest-priority configuration layer, mapping flag names to config fields",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Implement BeamDcd.Config.apply_cli_flags/2 that accepts a Config struct and keyword list of CLI flags. Use Enum.reduce/3 to process flags. Map :format flag to output_format field, :include_deps to exclude_deps (negated), and ignore :strict and :config flags (handled elsewhere). Return updated Config struct. This ensures CLI flags have highest precedence: defaults < config file < CLI flags.",
+            "status": "pending",
+            "testStrategy": "Test that :format flag maps to output_format. Test that :include_deps negates to exclude_deps. Test that :strict and :config flags are ignored without errors. Test multiple flags applied in sequence."
+          },
+          {
+            "id": 5,
+            "title": "Add config validation and regex pattern compilation",
+            "description": "Implement validation logic for configuration values and compile regex patterns in ignore_modules to catch errors early",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Add validate/1 function that checks config validity: verify beam_paths is a list of strings, output_format is one of [:text, :json, :github, :sarif], severity is :definite or :probable. For ignore_modules list, compile any string patterns to Regex using Regex.compile!/2 and keep existing Regex or atom values as-is. Add this validation step inside load/1 after merge. Return {:error, validation_message} if validation fails.",
+            "status": "pending",
+            "testStrategy": "Test invalid output_format values raise errors. Test invalid severity values fail validation. Test ignore_modules with strings are compiled to Regex. Test ignore_modules with existing Regex/atoms pass through unchanged. Test invalid regex patterns return clear error messages."
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Create core analysis engine with export/used/unused computation",
+        "description": "Build main analyzer that orchestrates Phase 1 (exports), Phase 2 (references), and Phase 3 (unused calculation) with ETS-backed storage",
+        "details": "Create BeamDcd.Analyzer as the main analysis engine.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.Analyzer do\n  alias BeamDcd.{ChunkParser, ReferenceCollector, EntrypointDetector, Config}\n  \n  @type analysis_result :: %{\n    unused_functions: [mfa_info()],\n    summary: %{\n      total_exports_analyzed: non_neg_integer(),\n      total_unused: non_neg_integer(),\n      modules_analyzed: non_neg_integer(),\n      warnings: [String.t()]\n    }\n  }\n  \n  @type mfa_info :: %{\n    module: atom(),\n    function: atom(),\n    arity: non_neg_integer(),\n    source_file: String.t() | nil,\n    source_line: non_neg_integer() | nil,\n    references_in_tests: non_neg_integer(),\n    references_in_prod: non_neg_integer()\n  }\n  \n  @spec analyze(Config.t()) :: {:ok, analysis_result()} | {:error, term()}\n  def analyze(config) do\n    beam_files = discover_beam_files(config)\n    \n    # Phase 1: Collect all exports (parallel)\n    exports_table = :ets.new(:exports, [:set, :public])\n    source_map_table = :ets.new(:source_map, [:set, :public])\n    \n    beam_files\n    |> Task.async_stream(&collect_exports(&1, exports_table, source_map_table), timeout: 30_000)\n    |> Stream.run()\n    \n    # Phase 2: Collect all references (parallel)\n    references_table = :ets.new(:references, [:bag, :public])\n    warnings_table = :ets.new(:warnings, [:bag, :public])\n    \n    beam_files\n    |> Task.async_stream(&collect_references(&1, references_table, warnings_table), timeout: 30_000)\n    |> Stream.run()\n    \n    # Phase 3: Compute unused\n    all_exports = :ets.tab2list(exports_table)\n    all_references = :ets.tab2list(references_table) |> Enum.map(&elem(&1, 0)) |> MapSet.new()\n    all_warnings = :ets.tab2list(warnings_table) |> Enum.map(&elem(&1, 0))\n    \n    unused = compute_unused(all_exports, all_references, config, beam_files)\n    \n    # Cleanup\n    :ets.delete(exports_table)\n    :ets.delete(references_table)\n    :ets.delete(source_map_table)\n    :ets.delete(warnings_table)\n    \n    result = %{\n      unused_functions: unused,\n      summary: %{\n        total_exports_analyzed: length(all_exports),\n        total_unused: length(unused),\n        modules_analyzed: beam_files |> Enum.map(&extract_module/1) |> Enum.uniq() |> length(),\n        warnings: Enum.uniq(all_warnings)\n      }\n    }\n    \n    {:ok, result}\n  end\n  \n  defp discover_beam_files(config) do\n    config.beam_paths\n    |> Enum.flat_map(&Path.wildcard/1)\n    |> Enum.filter(&String.ends_with?(&1, \".beam\"))\n    |> filter_by_config(config)\n  end\n  \n  defp filter_by_config(files, config) do\n    files\n    |> then(&if config.exclude_deps, do: filter_deps(&1), else: &1)\n    |> then(&if not config.include_test, do: filter_test(&1), else: &1)\n  end\n  \n  defp compute_unused(exports, references, config, beam_files) do\n    # Build behaviour map for entrypoint detection\n    behaviour_map = build_behaviour_map(beam_files)\n    \n    exports\n    |> Enum.reject(fn {mfa, _source} ->\n      {module, _fun, _arity} = mfa\n      mfa in references or\n      EntrypointDetector.is_entrypoint?(mfa, Map.get(behaviour_map, module, []), config) or\n      should_ignore?(mfa, config)\n    end)\n    |> Enum.map(fn {mfa, source_info} ->\n      {module, function, arity} = mfa\n      %{\n        module: module,\n        function: function,\n        arity: arity,\n        source_file: source_info[:file],\n        source_line: source_info[:line],\n        references_in_tests: 0,\n        references_in_prod: 0\n      }\n    end)\n  end\nend\n```",
+        "testStrategy": "Integration tests with realistic project structure:\n- Create fixture project with mix of used/unused functions\n- Test with dependencies included/excluded\n- Verify ETS tables for O(1) lookups\n- Performance test: 500 BEAM files in <10s\n- Test behaviour callback exclusion\n- Verify ignore patterns work correctly",
+        "priority": "high",
+        "dependencies": [
+          1,
+          4,
+          5,
+          6
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.Analyzer module skeleton with type definitions and structure",
+            "description": "Set up the BeamDcd.Analyzer module file with comprehensive type definitions for analysis results, MFA info, module documentation, and function stubs for the main analysis pipeline",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/analyzer.ex with:\n- Module definition and @moduledoc explaining the three-phase analysis approach (Phase 1: collect exports, Phase 2: collect references, Phase 3: compute unused)\n- Alias statements for BeamDcd.{ChunkParser, ReferenceCollector, EntrypointDetector, Config}\n- @type analysis_result :: %{unused_functions: [mfa_info()], summary: %{total_exports_analyzed: non_neg_integer(), total_unused: non_neg_integer(), modules_analyzed: non_neg_integer(), warnings: [String.t()]}}\n- @type mfa_info :: %{module: atom(), function: atom(), arity: non_neg_integer(), source_file: String.t() | nil, source_line: non_neg_integer() | nil, references_in_tests: non_neg_integer(), references_in_prod: non_neg_integer()}\n- @spec analyze(Config.t()) :: {:ok, analysis_result()} | {:error, term()}\n- Function stubs for: analyze/1, discover_beam_files/1, collect_exports/3, collect_references/3, compute_unused/4, filter_by_config/2, build_behaviour_map/1, should_ignore?/2, extract_module/1\n- Document ETS-based storage strategy and parallel processing approach",
+            "status": "pending",
+            "testStrategy": "Verify module compiles without errors using mix compile. Run dialyzer to validate all type specifications. Confirm all aliases resolve correctly to expected modules. Check module documentation is accessible via IEx `h BeamDcd.Analyzer`."
+          },
+          {
+            "id": 2,
+            "title": "Implement Phase 1 export collection with parallel BEAM file processing",
+            "description": "Create discover_beam_files/1 to find BEAM files based on config, and collect_exports/3 to populate ETS tables with exported functions and source information using parallel Task.async_stream",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement in lib/beam_dcd/analyzer.ex:\n- discover_beam_files/1: Use config.beam_paths with Enum.flat_map(&Path.wildcard/1) to expand glob patterns, filter for .beam extension with String.ends_with?(&1, \".beam\"), and pass to filter_by_config/2\n- filter_by_config/2: Use then/2 pipeline to conditionally apply filter_deps/1 if config.exclude_deps is true, and filter_test/1 if config.include_test is false\n- filter_deps/1: Filter out files containing \"_build/*/lib/*/ebin\" or \"/deps/\" in path (keep only project files)\n- filter_test/1: Filter out files containing \"/test/\" in path\n- collect_exports/3: Accept beam_file path and two ETS tables (exports_table, source_map_table). Call ChunkParser.parse_exports/1 and ChunkParser.parse_attributes/1. For each export MFA, insert into exports_table. Extract source file from compile_info chunk and store in source_map_table. Handle errors gracefully by logging and continuing.\n- In analyze/1 Phase 1: Create ETS tables with :ets.new(:exports, [:set, :public]) and :ets.new(:source_map, [:set, :public]), use Task.async_stream/3 with timeout: 30_000 to process beam_files in parallel, call Stream.run/0 to execute",
+            "status": "pending",
+            "testStrategy": "Test discover_beam_files/1 with fixture config containing glob patterns like \"test/fixtures/ebin/*.beam\". Verify filter_deps excludes dependency paths. Verify filter_test excludes test paths when config.include_test is false. Test collect_exports/3 populates ETS tables correctly with known exports from compiled fixture modules. Test parallel processing with 10+ BEAM files completes successfully. Verify error handling when encountering corrupted BEAM files."
+          },
+          {
+            "id": 3,
+            "title": "Implement Phase 2 reference collection with parallel processing and warning aggregation",
+            "description": "Create collect_references/3 to populate ETS tables with used function references and analysis warnings using ReferenceCollector for each BEAM file in parallel",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement in lib/beam_dcd/analyzer.ex:\n- collect_references/3: Accept beam_file path and two ETS tables (references_table configured as :bag type, warnings_table configured as :bag type). Call ReferenceCollector.collect/1 to get analysis_result containing used_functions MapSet and warnings list. Convert MapSet to list and insert each MFA into references_table using :ets.insert/2. Insert each warning string into warnings_table. Handle {:error, reason} cases by logging error and continuing to next file.\n- In analyze/1 Phase 2: Create ETS tables with :ets.new(:references, [:bag, :public]) and :ets.new(:warnings, [:bag, :public]). Use Task.async_stream/3 with timeout: 30_000 to call collect_references/3 for each beam_file in parallel. Call Stream.run/0 to execute all tasks.\n- ETS :bag type allows duplicate keys which is needed since multiple files may reference same MFA or produce same warning\n- Ensure proper error isolation - one failed BEAM file shouldn't stop analysis of others",
+            "status": "pending",
+            "testStrategy": "Test collect_references/3 calls ReferenceCollector.collect/1 correctly and populates both ETS tables. Create fixture with multiple BEAM files that reference common functions (like Enum.map/2) and verify references_table accumulates all references. Test warnings are properly inserted into warnings_table. Test error handling when ReferenceCollector.collect/1 fails for a file - verify analysis continues for remaining files. Verify parallel processing with Task.async_stream completes within timeout. Test with 50+ fixture BEAM files to ensure performance."
+          },
+          {
+            "id": 4,
+            "title": "Implement Phase 3 unused computation with behaviour detection and filtering",
+            "description": "Create compute_unused/4 to determine which exported functions are truly unused by filtering out referenced functions, entrypoints, and ignored patterns, and build_behaviour_map/1 to support behaviour callback detection",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Implement in lib/beam_dcd/analyzer.ex:\n- build_behaviour_map/1: Accept list of beam_files. For each file, call EntrypointDetector.detect_behaviours/1 to get behaviour list. Extract module name from beam_file using :beam_lib.info/1 or path parsing. Return map of %{module => [behaviours]} for O(1) lookup.\n- should_ignore?/2: Accept {module, function, arity} MFA tuple and config. Check if module matches any pattern in config.ignore_modules using Regex.match?/2 for regex patterns or atom equality. Check if MFA exists in config.ignore_functions list. Return true if should be ignored, false otherwise.\n- extract_module/1: Accept beam_file path, use Path.basename/1 and String.replace_suffix(\".beam\", \"\") to extract module name string, convert to atom.\n- compute_unused/4: Accept exports list from ETS (as [{mfa, source_info}] tuples), references MapSet, config, and beam_files list. Build behaviour_map using build_behaviour_map/1. Use Enum.reject/2 to filter exports where: (1) mfa in references MapSet, (2) EntrypointDetector.is_entrypoint?(mfa, Map.get(behaviour_map, module, []), config) returns true, (3) should_ignore?(mfa, config) returns true. Use Enum.map/2 to transform remaining [{mfa, source_info}] into mfa_info maps with all required fields (module, function, arity, source_file, source_line from source_info, references_in_tests: 0, references_in_prod: 0).",
+            "status": "pending",
+            "testStrategy": "Test build_behaviour_map/1 with fixture GenServer and Supervisor modules, verify map contains correct behaviour lists. Test should_ignore?/2 with regex patterns in config.ignore_modules (like ~r/.*Test$/), verify matching modules are ignored. Test with explicit MFAs in config.ignore_functions. Test compute_unused/4 with realistic exports and references: verify used functions are filtered out, behaviour callbacks are excluded (GenServer init/1, handle_call/3, etc.), compiler-generated functions are excluded, ignored patterns are filtered. Test with empty references (all exports should be unused except entrypoints). Verify source_info is correctly mapped to mfa_info fields."
+          },
+          {
+            "id": 5,
+            "title": "Complete analyze/1 orchestration with ETS table management and result assembly",
+            "description": "Finalize the main analyze/1 function to orchestrate all three phases, manage ETS table lifecycle, aggregate results from ETS tables, and assemble the final analysis_result with summary statistics",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Complete implementation in lib/beam_dcd/analyzer.ex analyze/1:\n- After Phase 2 completes, extract data from ETS tables: all_exports = :ets.tab2list(exports_table), all_references = :ets.tab2list(references_table) |> Enum.map(&elem(&1, 0)) |> MapSet.new(), all_warnings = :ets.tab2list(warnings_table) |> Enum.map(&elem(&1, 0))\n- Call compute_unused/4 with all_exports, all_references, config, beam_files to get unused functions list\n- Build summary map with total_exports_analyzed: length(all_exports), total_unused: length(unused), modules_analyzed: beam_files |> Enum.map(&extract_module/1) |> Enum.uniq() |> length(), warnings: Enum.uniq(all_warnings)\n- Clean up ETS tables: :ets.delete(exports_table), :ets.delete(references_table), :ets.delete(source_map_table), :ets.delete(warnings_table)\n- Assemble final result: %{unused_functions: unused, summary: summary}\n- Return {:ok, result}\n- Add error handling for discover_beam_files returning empty list (return {:error, :no_beam_files_found})\n- Add @doc documentation with usage examples and explanation of three-phase approach\n- Ensure proper cleanup of ETS tables even if errors occur (consider using try/after or with statement)",
+            "status": "pending",
+            "testStrategy": "Integration test with complete analysis pipeline: create fixture project with mix of used/unused functions across multiple modules, some implementing GenServer. Run analyze/1 and verify: (1) all phases execute, (2) ETS tables are created and cleaned up (verify with :ets.all() before and after), (3) unused_functions list contains expected unused exports, (4) summary statistics are accurate (counts match fixture), (5) warnings from ReferenceCollector are aggregated and deduplicated. Test with empty beam_paths returns appropriate error. Test with config.exclude_deps filters dependencies correctly. Performance test: analyze 100+ fixture BEAM files completes in under 5 seconds. Test ETS cleanup happens even if Phase 3 encounters errors. Memory test: verify no ETS table leaks after repeated analysis runs."
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Implement output formatters for text, JSON, GitHub, and SARIF",
+        "description": "Create formatter modules that render analysis results in multiple output formats with proper source file mapping",
+        "details": "Create BeamDcd.Formatters namespace with protocol-based formatting.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.Formatter do\n  @callback format(map()) :: String.t()\n  \n  def format(result, :text), do: BeamDcd.Formatters.Text.format(result)\n  def format(result, :json), do: BeamDcd.Formatters.JSON.format(result)\n  def format(result, :github), do: BeamDcd.Formatters.GitHub.format(result)\n  def format(result, :sarif), do: BeamDcd.Formatters.SARIF.format(result)\nend\n\ndefmodule BeamDcd.Formatters.Text do\n  def format(%{unused_functions: unused, summary: summary}) do\n    # Group by source file\n    grouped = Enum.group_by(unused, & &1.source_file)\n    \n    output = [\"== Unused Public Functions ==\", \"\"]\n    \n    file_outputs = \n      grouped\n      |> Enum.sort_by(fn {file, _} -> file || \"\" end)\n      |> Enum.map(fn {file, functions} ->\n        module_name = format_module_name(List.first(functions).module)\n        header = \"#{file || module_name} (#{module_name})\"\n        \n        function_lines = \n          functions\n          |> Enum.map(fn f ->\n            \"  ├── #{f.function}/#{f.arity}        (0 references)\"\n          end)\n        \n        [header | function_lines]\n      end)\n      |> List.flatten()\n    \n    summary_line = [\n      \"\",\n      \"Found #{summary.total_unused} unused public functions across #{length(Map.keys(grouped))} modules.\"\n    ]\n    \n    (output ++ file_outputs ++ summary_line)\n    |> Enum.join(\"\\n\")\n  end\n  \n  defp format_module_name(module) do\n    module\n    |> to_string()\n    |> String.replace_prefix(\"Elixir.\", \"\")\n  end\nend\n\ndefmodule BeamDcd.Formatters.JSON do\n  def format(result) do\n    Jason.encode!(result, pretty: true)\n  end\nend\n\ndefmodule BeamDcd.Formatters.GitHub do\n  # GitHub Actions annotation format\n  def format(%{unused_functions: unused}) do\n    unused\n    |> Enum.map(fn f ->\n      file = f.source_file || \"unknown\"\n      line = f.source_line || 1\n      \"::warning file=#{file},line=#{line}::Unused function #{f.function}/#{f.arity}\"\n    end)\n    |> Enum.join(\"\\n\")\n  end\nend\n\ndefmodule BeamDcd.Formatters.SARIF do\n  # SARIF 2.1.0 format for IDE integration\n  def format(%{unused_functions: unused}) do\n    sarif = %{\n      version: \"2.1.0\",\n      \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n      runs: [\n        %{\n          tool: %{\n            driver: %{\n              name: \"BEAM Dead Code Detector\",\n              version: \"0.1.0\",\n              informationUri: \"https://github.com/beam_dcd\"\n            }\n          },\n          results: Enum.map(unused, &to_sarif_result/1)\n        }\n      ]\n    }\n    Jason.encode!(sarif, pretty: true)\n  end\n  \n  defp to_sarif_result(f) do\n    %{\n      ruleId: \"unused-function\",\n      message: %{text: \"Unused public function #{f.function}/#{f.arity}\"},\n      locations: [\n        %{\n          physicalLocation: %{\n            artifactLocation: %{uri: f.source_file || \"unknown\"},\n            region: %{startLine: f.source_line || 1}\n          }\n        }\n      ]\n    }\n  end\nend\n```\n\nAdd Jason dependency to mix.exs for JSON encoding.",
+        "testStrategy": "Test each formatter with sample analysis results:\n- Text format: verify tree structure, Elixir. prefix stripping, file grouping\n- JSON format: validate against schema, verify all fields present\n- GitHub format: verify annotation format matches GitHub Actions spec\n- SARIF format: validate against SARIF 2.1.0 JSON schema\nTest with modules that have/don't have source file info.",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add Jason dependency to mix.exs for JSON encoding",
+            "description": "Add the Jason library as a dependency in mix.exs to enable JSON encoding functionality required by all formatters",
+            "dependencies": [],
+            "details": "Update the deps/0 function in mix.exs to include {:jason, \"~> 1.4\"} as a dependency. This is required for JSON encoding in the JSON and SARIF formatters. Run 'mix deps.get' to fetch the dependency. Verify the dependency is properly added by checking mix.lock is created/updated.",
+            "status": "pending",
+            "testStrategy": "Run 'mix deps.get' successfully, verify Jason is listed in 'mix deps', and ensure the project compiles with 'mix compile' without errors"
+          },
+          {
+            "id": 2,
+            "title": "Implement BeamDcd.Formatter dispatcher module",
+            "description": "Create the main formatter dispatcher module that routes format requests to appropriate formatter implementations based on format type",
+            "dependencies": [
+              1
+            ],
+            "details": "Create lib/beam_dcd/formatter.ex with a format/2 function that accepts analysis results and format type (:text, :json, :github, :sarif). Implement pattern matching to dispatch to BeamDcd.Formatters.Text, JSON, GitHub, or SARIF modules. Add @callback format(map()) :: String.t() behavior definition for future formatter implementations. This module serves as the public API for all formatting operations.",
+            "status": "pending",
+            "testStrategy": "Write unit tests that verify format/2 correctly dispatches to each formatter module. Test with mock analysis results containing unused_functions and summary maps. Verify error handling for invalid format types."
+          },
+          {
+            "id": 3,
+            "title": "Implement BeamDcd.Formatters.Text module for human-readable output",
+            "description": "Create text formatter that groups unused functions by source file and displays them in a tree structure with reference counts",
+            "dependencies": [
+              2
+            ],
+            "details": "Create lib/beam_dcd/formatters/text.ex implementing format/1 function. Group unused functions by source_file field using Enum.group_by. Sort grouped results by filename. Format each file section with header showing 'file_path (Module.Name)' and function entries using tree characters (├──, └──). Strip 'Elixir.' prefix from module names using String.replace_prefix. Include summary line showing total unused functions and module count. Handle nil source_file gracefully by using module name as fallback.",
+            "status": "pending",
+            "testStrategy": "Test with sample analysis results containing multiple modules with and without source_file attributes. Verify tree structure formatting, Elixir. prefix stripping, proper file grouping and sorting. Validate summary line calculations. Test edge cases: single function, no unused functions, missing source_file."
+          },
+          {
+            "id": 4,
+            "title": "Implement BeamDcd.Formatters.JSON and GitHub modules",
+            "description": "Create JSON formatter for structured output and GitHub Actions formatter for CI/CD annotation integration",
+            "dependencies": [
+              2
+            ],
+            "details": "Create lib/beam_dcd/formatters/json.ex with format/1 that uses Jason.encode!/2 with pretty: true option to encode the entire analysis result map. Create lib/beam_dcd/formatters/github.ex with format/1 that transforms unused_functions into GitHub Actions annotation format (::warning file=FILE,line=LINE::MESSAGE). Extract source_file and source_line from each function, defaulting to 'unknown' and 1 respectively. Format message as 'Unused function FUNCTION/ARITY'. Join all annotations with newlines.",
+            "status": "pending",
+            "testStrategy": "JSON formatter: validate output against JSON schema, verify all fields from input map are preserved, test pretty printing. GitHub formatter: verify annotation format matches GitHub Actions spec (::warning file=path,line=N::message), test with missing source_file/source_line fields, validate message format includes function name and arity."
+          },
+          {
+            "id": 5,
+            "title": "Implement BeamDcd.Formatters.SARIF module for IDE integration",
+            "description": "Create SARIF 2.1.0 formatter that produces static analysis results in SARIF format for IDE and tooling integration",
+            "dependencies": [
+              2
+            ],
+            "details": "Create lib/beam_dcd/formatters/sarif.ex implementing format/1. Generate SARIF 2.1.0 compliant JSON structure with version, schema URL (https://json.schemastore.org/sarif-2.1.0.json), runs array containing tool driver info (name: 'BEAM Dead Code Detector', version: '0.1.0') and results array. Transform each unused function to SARIF result with ruleId: 'unused-function', message text, and physical location (artifactLocation with URI and region with startLine). Use Jason.encode!/2 with pretty: true for output.",
+            "status": "pending",
+            "testStrategy": "Validate output against SARIF 2.1.0 JSON schema (https://json.schemastore.org/sarif-2.1.0.json). Verify tool driver metadata is correct. Test transformation of unused functions to SARIF results with proper location mapping. Test with missing source_file (defaults to 'unknown') and missing source_line (defaults to 1). Verify SARIF structure includes version, schema, runs, tool, and results fields."
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Create Mix task interface with CLI argument parsing",
+        "description": "Implement mix unused_functions task with flag parsing, project compilation verification, and exit code handling",
+        "details": "Create Mix.Tasks.UnusedFunctions module.\n\nImplementation:\n```elixir\ndefmodule Mix.Tasks.UnusedFunctions do\n  use Mix.Task\n  \n  @shortdoc \"Finds unused public functions in BEAM files\"\n  \n  @moduledoc \"\"\"\n  Analyzes compiled BEAM files to detect unused public functions.\n  \n  ## Usage\n  \n      mix unused_functions                    # Run with defaults\n      mix unused_functions --format json      # JSON output\n      mix unused_functions --include-deps     # Include dependencies\n      mix unused_functions --strict           # Exit 1 if unused found\n      mix unused_functions --config path      # Custom config file\n  \n  ## Options\n  \n    * `--format` - Output format: text (default), json, github, sarif\n    * `--include-deps` - Include dependencies in analysis\n    * `--include-test` - Include test files in analysis\n    * `--strict` - Exit with code 1 if unused functions found\n    * `--config` - Path to config file (default: .beam_unused.exs)\n  \n  \"\"\"\n  \n  @impl Mix.Task\n  def run(args) do\n    {opts, _argv, _errors} = OptionParser.parse(args,\n      strict: [\n        format: :string,\n        include_deps: :boolean,\n        include_test: :boolean,\n        strict: :boolean,\n        config: :string\n      ]\n    )\n    \n    # Ensure project is compiled\n    Mix.Task.run(\"compile\")\n    \n    # Load config\n    {:ok, config} = BeamDcd.Config.load(opts[:config])\n    config = BeamDcd.Config.apply_cli_flags(config, opts)\n    \n    # Run analysis\n    case BeamDcd.Analyzer.analyze(config) do\n      {:ok, result} ->\n        output = BeamDcd.Formatter.format(result, config.output_format)\n        IO.puts(output)\n        \n        # Handle strict mode\n        if opts[:strict] and result.summary.total_unused > 0 do\n          System.halt(1)\n        end\n        \n      {:error, reason} ->\n        Mix.shell().error(\"Analysis failed: #{inspect(reason)}\")\n        System.halt(1)\n    end\n  end\nend\n```\n\nUpdate mix.exs to add Jason dependency:\n```elixir\ndefp deps do\n  [\n    {:jason, \"~> 1.4\"}\n  ]\nend\n```",
+        "testStrategy": "Integration tests:\n- Run mix task in test project, verify output\n- Test --format flag with all formats\n- Test --strict mode exits with code 1 when unused found\n- Test --strict mode exits with code 0 when clean\n- Test --config loads custom config\n- Test --include-deps flag\n- Verify mix compile runs before analysis\nUse Mix.Shell.Process for capturing output in tests.",
+        "priority": "high",
+        "dependencies": [
+          6,
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Mix.Tasks.UnusedFunctions module skeleton",
+            "description": "Create the basic Mix task module structure with proper Mix.Task behavior implementation and module documentation",
+            "dependencies": [],
+            "details": "Create lib/mix/tasks/unused_functions.ex with:\n- Module declaration: defmodule Mix.Tasks.UnusedFunctions\n- use Mix.Task behavior\n- @shortdoc attribute: \"Finds unused public functions in BEAM files\"\n- @moduledoc with comprehensive usage documentation including all flags (--format, --include-deps, --include-test, --strict, --config)\n- @impl Mix.Task annotation\n- Empty run/1 function stub that accepts args parameter\n\nFollow Elixir naming conventions where Mix tasks use dot-separated names but file paths use underscores.",
+            "status": "pending",
+            "testStrategy": "Manual verification:\n- Verify mix help shows the task with correct shortdoc\n- Verify mix help unused_functions displays full documentation\n- Ensure module compiles without errors"
+          },
+          {
+            "id": 2,
+            "title": "Implement CLI argument parsing with OptionParser",
+            "description": "Add OptionParser.parse/2 call to parse command-line flags into options map with proper strict type definitions",
+            "dependencies": [
+              1
+            ],
+            "details": "In the run/1 function, implement:\n- OptionParser.parse(args, strict: [...]) with all five flags:\n  * format: :string (output format selection)\n  * include_deps: :boolean (include dependencies flag)\n  * include_test: :boolean (include test files flag) \n  * strict: :boolean (strict mode for CI)\n  * config: :string (custom config file path)\n- Destructure result into {opts, _argv, _errors} tuple\n- Store opts for later use in config merging\n\nThis creates the foundation for all CLI flag handling without implementing the actual flag logic yet.",
+            "status": "pending",
+            "testStrategy": "Unit tests in test/mix/tasks/unused_functions_test.exs:\n- Test OptionParser correctly parses each flag individually\n- Test multiple flags together\n- Test that invalid flags are captured in errors tuple\n- Test that non-flag arguments go into argv tuple"
+          },
+          {
+            "id": 3,
+            "title": "Add project compilation verification",
+            "description": "Ensure the Mix project is compiled before analysis by calling Mix.Task.run for the compile task",
+            "dependencies": [
+              2
+            ],
+            "details": "After argument parsing in run/1:\n- Add Mix.Task.run(\"compile\") to ensure all BEAM files are up-to-date\n- This runs the Elixir compiler and ensures _build/dev/lib/*/ebin contains current .beam files\n- Must happen before BeamDcd.Analyzer.analyze/1 is called\n- No error handling needed - Mix.Task.run will abort on compilation errors automatically\n\nThis ensures users don't analyze stale BEAM files if source code changed.",
+            "status": "pending",
+            "testStrategy": "Integration test:\n- Create test fixture project with outdated BEAM files\n- Run mix unused_functions\n- Verify compile task was invoked (check Mix task history or compilation output)\n- Verify analysis runs on freshly compiled BEAM files"
+          },
+          {
+            "id": 4,
+            "title": "Integrate config loading and CLI flag merging",
+            "description": "Load configuration from file or defaults and merge with CLI flags using BeamDcd.Config module",
+            "dependencies": [
+              2
+            ],
+            "details": "After compilation verification:\n- Call BeamDcd.Config.load(opts[:config]) to load config from file (or default .beam_unused.exs)\n- Pattern match on {:ok, config}\n- Call BeamDcd.Config.apply_cli_flags(config, opts) to merge CLI flags into config\n- This allows CLI flags to override file-based config\n- The config struct will contain all settings: output_format, include_deps, include_test, ignore_modules, etc.\n\nAssumes Task 6 (Config module) is already implemented.",
+            "status": "pending",
+            "testStrategy": "Integration tests:\n- Test with no config file, verify defaults loaded\n- Test with custom config file via --config flag\n- Test that --format flag overrides config file output_format\n- Test that --include-deps flag overrides config exclude_deps setting\n- Verify error handling when config file doesn't exist"
+          },
+          {
+            "id": 5,
+            "title": "Implement analysis execution and output handling with exit codes",
+            "description": "Call BeamDcd.Analyzer.analyze/1, format output, display results, and handle exit codes for strict mode",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Complete the run/1 implementation:\n- Call BeamDcd.Analyzer.analyze(config) and pattern match result\n- On {:ok, result}:\n  * Call BeamDcd.Formatter.format(result, config.output_format) to get formatted output string\n  * IO.puts(output) to display to user\n  * Check if opts[:strict] is true AND result.summary.total_unused > 0\n  * If both conditions met, call System.halt(1) for CI failure\n  * Otherwise, task completes normally (exit code 0)\n- On {:error, reason}:\n  * Call Mix.shell().error(\"Analysis failed: #{inspect(reason)}\")\n  * Call System.halt(1) to indicate failure\n\nAssumes Tasks 7 (Analyzer) and 8 (Formatter) are implemented.",
+            "status": "pending",
+            "testStrategy": "Integration tests:\n- Test successful analysis displays formatted output\n- Test --format json produces valid JSON\n- Test --format text produces readable text\n- Test --strict mode exits with code 1 when unused functions found\n- Test --strict mode exits with code 0 when no unused functions\n- Test error handling when analyzer fails (corrupted BEAM file)\n- Run against real project and verify output correctness"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Create escript CLI for standalone BEAM file analysis",
+        "description": "Build standalone command-line tool that can analyze BEAM files without Mix project context",
+        "details": "Create BeamDcd.CLI module and configure escript in mix.exs.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.CLI do\n  @moduledoc false\n  \n  def main(args) do\n    {opts, argv, _errors} = OptionParser.parse(args,\n      strict: [\n        format: :string,\n        config: :string,\n        help: :boolean\n      ],\n      aliases: [\n        h: :help,\n        f: :format\n      ]\n    )\n    \n    if opts[:help] or argv == [] do\n      print_help()\n      System.halt(0)\n    end\n    \n    # Load config\n    {:ok, config} = BeamDcd.Config.load(opts[:config])\n    \n    # Override beam_paths with CLI arguments\n    config = %{config | beam_paths: argv}\n    \n    # Apply format flag\n    config = if opts[:format] do\n      format_atom = String.to_existing_atom(opts[:format])\n      %{config | output_format: format_atom}\n    else\n      config\n    end\n    \n    # Run analysis\n    case BeamDcd.Analyzer.analyze(config) do\n      {:ok, result} ->\n        output = BeamDcd.Formatter.format(result, config.output_format)\n        IO.puts(output)\n        \n        if result.summary.total_unused > 0 do\n          System.halt(1)\n        else\n          System.halt(0)\n        end\n        \n      {:error, reason} ->\n        IO.puts(:stderr, \"Error: #{inspect(reason)}\")\n        System.halt(1)\n    end\n  end\n  \n  defp print_help do\n    IO.puts(\"\"\"\n    BEAM Dead Code Detector - Find unused public functions\n    \n    Usage:\n      beam_unused [options] <beam_paths...>\n    \n    Arguments:\n      <beam_paths>    Paths to BEAM files or directories (supports globs)\n    \n    Options:\n      --format, -f    Output format: text, json, github, sarif (default: text)\n      --config        Path to config file (default: .beam_unused.exs)\n      --help, -h      Show this help\n    \n    Examples:\n      beam_unused /path/to/ebin\n      beam_unused _build/dev/lib/*/ebin --format json\n      beam_unused --config custom.exs /app/ebin\n    \"\"\")\n  end\nend\n```\n\nUpdate mix.exs:\n```elixir\ndef project do\n  [\n    app: :beam_dcd,\n    version: \"0.1.0\",\n    elixir: \"~> 1.19\",\n    start_permanent: Mix.env() == :prod,\n    deps: deps(),\n    escript: escript()\n  ]\nend\n\ndefp escript do\n  [\n    main_module: BeamDcd.CLI,\n    name: \"beam_unused\"\n  ]\nend\n```",
+        "testStrategy": "Integration tests:\n- Build escript with `mix escript.build`\n- Run standalone against test BEAM directories\n- Test help output\n- Test glob pattern support for beam_paths\n- Test all format flags\n- Test config file loading in non-Mix context\n- Test exit codes (0 for clean, 1 for unused found)\n- Verify works without Mix project in current directory",
+        "priority": "medium",
+        "dependencies": [
+          6,
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.CLI module with argument parsing",
+            "description": "Implement the BeamDcd.CLI module with OptionParser to handle command-line arguments including --format, --config, and --help flags with proper aliases",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/cli.ex file and implement the BeamDcd.CLI module with:\n- @moduledoc false directive\n- main/1 function as entry point accepting args list\n- OptionParser.parse/2 with strict options: format (string), config (string), help (boolean)\n- Aliases: h for help, f for format\n- Help check: if opts[:help] or argv == [], call print_help() and System.halt(0)\n- Store positional arguments in argv for beam_paths parameter\n- Return parsed opts and argv tuple for downstream processing",
+            "status": "pending",
+            "testStrategy": "Unit tests:\n- Test parsing --format json returns {:format, \"json\"} in opts\n- Test parsing -f text returns {:format, \"text\"} in opts\n- Test --help flag triggers help output\n- Test -h alias triggers help output\n- Test empty args triggers help output\n- Test positional args are captured in argv\n- Test --config path/to/config.exs returns {:config, \"path/to/config.exs\"}\n- Test multiple flags together parse correctly"
+          },
+          {
+            "id": 2,
+            "title": "Implement help text display in CLI module",
+            "description": "Create print_help/0 private function that outputs comprehensive usage information including examples, options, and arguments description",
+            "dependencies": [
+              1
+            ],
+            "details": "Add print_help/0 private function to BeamDcd.CLI module:\n- Use IO.puts/1 to display multi-line heredoc string\n- Include sections: tool description, usage syntax, arguments explanation, options with descriptions\n- Document all flags: --format/-f (text, json, github, sarif), --config (path to config file), --help/-h\n- Provide 3 concrete examples: basic usage with path, format flag usage, config file usage\n- Match the format shown in task implementation details\n- Use clear, concise language suitable for CLI help output",
+            "status": "pending",
+            "testStrategy": "Integration tests:\n- Run beam_unused --help and verify output contains \"BEAM Dead Code Detector\"\n- Verify output includes usage syntax line\n- Verify all option flags are documented\n- Verify examples section is present\n- Test output formatting is readable and properly aligned\n- Verify --help exits with code 0"
+          },
+          {
+            "id": 3,
+            "title": "Implement config loading and CLI argument integration",
+            "description": "Add config loading logic that loads BeamDcd.Config from file, overrides beam_paths with CLI arguments, and applies format flag override",
+            "dependencies": [
+              1
+            ],
+            "details": "In BeamDcd.CLI.main/1 function after argument parsing:\n- Call BeamDcd.Config.load/1 with opts[:config] parameter (this depends on Config module from task 6)\n- Handle {:ok, config} and {:error, reason} tuple responses\n- Override config.beam_paths with argv from CLI arguments: %{config | beam_paths: argv}\n- Apply format flag override if opts[:format] is present:\n  - Convert format string to atom using String.to_existing_atom/1\n  - Update config: %{config | output_format: format_atom}\n- Chain operations using pattern matching and pipe operator where appropriate\n- Ensure config struct is properly updated before passing to analyzer",
+            "status": "pending",
+            "testStrategy": "Integration tests:\n- Test config loads from default .beam_unused.exs file\n- Test --config flag loads from custom path\n- Test beam_paths from CLI args override config file beam_paths\n- Test --format json overrides config output_format to :json\n- Test --format text sets output_format to :text\n- Test config loading error handling when file not found\n- Verify final config struct has correct values after all overrides"
+          },
+          {
+            "id": 4,
+            "title": "Implement analysis execution and output formatting",
+            "description": "Add logic to execute BeamDcd.Analyzer.analyze/1 with config, format results using BeamDcd.Formatter.format/2, and output to stdout",
+            "dependencies": [
+              3
+            ],
+            "details": "In BeamDcd.CLI.main/1 function after config is prepared:\n- Call BeamDcd.Analyzer.analyze/1 with the config struct (depends on Analyzer from task 7)\n- Pattern match on {:ok, result} and {:error, reason} tuples\n- For success case:\n  - Call BeamDcd.Formatter.format/2 with result and config.output_format (depends on Formatter from task 8)\n  - Use IO.puts/1 to write formatted output to stdout\n- For error case:\n  - Use IO.puts/2 with :stderr to write error message\n  - Format error as \"Error: #{inspect(reason)}\"\n- Ensure proper error handling and descriptive messages for debugging",
+            "status": "pending",
+            "testStrategy": "Integration tests:\n- Run beam_unused against test BEAM directory, verify output appears on stdout\n- Test JSON format output is valid JSON and parseable\n- Test text format output is human-readable\n- Test github format output matches GitHub Actions annotation format\n- Test SARIF format output is valid SARIF JSON\n- Test error handling when analyzer returns {:error, reason}\n- Verify error messages appear on stderr not stdout"
+          },
+          {
+            "id": 5,
+            "title": "Implement exit code handling and configure escript in mix.exs",
+            "description": "Add exit code logic based on analysis results (0 for clean, 1 for unused found or errors), and configure escript build settings in mix.exs project configuration",
+            "dependencies": [
+              4
+            ],
+            "details": "Complete CLI implementation:\n- In success case after output, check result.summary.total_unused\n- If total_unused > 0, call System.halt(1) for non-zero exit code\n- If total_unused == 0, call System.halt(0) for clean exit\n- In error case, call System.halt(1) after printing error\n\nUpdate mix.exs:\n- In BeamDcd.MixProject.project/0 function, add escript: escript() to keyword list\n- Create new private function: defp escript do\n- Return keyword list with main_module: BeamDcd.CLI and name: \"beam_unused\"\n- Ensure function is properly formatted and follows Mix project conventions",
+            "status": "pending",
+            "testStrategy": "Integration tests:\n- Build escript: mix escript.build, verify beam_unused binary created\n- Run standalone ./beam_unused against clean BEAM directory, verify exit code 0\n- Run against directory with unused functions, verify exit code 1\n- Test escript runs without Mix project context (standalone execution)\n- Test glob pattern support: ./beam_unused \"_build/dev/lib/*/ebin\"\n- Test all format flags work in escript mode\n- Test --config flag works with escript\n- Verify binary is executable and portable"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Create comprehensive test suite with fixture BEAM files",
+        "description": "Build test fixtures in Elixir and Erlang, compile to BEAM, and create thorough test coverage for all analysis scenarios",
+        "details": "Create test/fixtures directory with test modules covering all scenarios.\n\nFixture modules to create:\n\n1. **test/fixtures/elixir/used_functions.ex**:\n```elixir\ndefmodule TestFixtures.UsedFunctions do\n  def public_used, do: :ok\n  def public_unused, do: :never_called\n  defp private_function, do: :ok\n  \n  def caller do\n    public_used()\n    private_function()\n  end\nend\n```\n\n2. **test/fixtures/elixir/genserver_impl.ex**:\n```elixir\ndefmodule TestFixtures.GenServerImpl do\n  use GenServer\n  \n  # Should not be reported as unused (behaviour callbacks)\n  def init(_), do: {:ok, %{}}\n  def handle_call(_msg, _from, state), do: {:reply, :ok, state}\n  def handle_cast(_msg, state), do: {:noreply, state}\n  \n  # Should be reported as unused\n  def unused_public, do: :not_called\nend\n```\n\n3. **test/fixtures/elixir/cross_module_caller.ex**:\n```elixir\ndefmodule TestFixtures.CrossModuleCaller do\n  def call_other_module do\n    TestFixtures.UsedFunctions.public_used()\n  end\n  \n  def capture_fun do\n    fun = &TestFixtures.UsedFunctions.public_used/0\n    fun.()\n  end\nend\n```\n\n4. **test/fixtures/erlang/erlang_module.erl**:\n```erlang\n-module(erlang_module).\n-export([exported_used/0, exported_unused/0]).\n\nexported_used() -> ok.\nexported_unused() -> never_called.\n```\n\n5. **test/fixtures/elixir/dynamic_dispatch.ex**:\n```elixir\ndefmodule TestFixtures.DynamicDispatch do\n  def uses_apply do\n    apply(__MODULE__, :target, [])\n  end\n  \n  def target, do: :ok\nend\n```\n\nCompilation setup in test_helper.exs:\n```elixir\n# Compile all fixture modules\nfixture_path = Path.expand(\"fixtures\", __DIR__)\nCode.compiler_options(debug_info: true)\n\n# Compile Elixir fixtures\nPath.wildcard(\"#{fixture_path}/elixir/*.ex\")\n|> Kernel.ParallelCompiler.compile_to_path(\"#{fixture_path}/ebin\")\n\n# Compile Erlang fixtures  \nerlang_files = Path.wildcard(\"#{fixture_path}/erlang/*.erl\")\nErlang.compile_files(erlang_files, \"#{fixture_path}/ebin\")\n\nExUnit.start()\n```\n\nTest cases:\n```elixir\ndefmodule BeamDcd.IntegrationTest do\n  use ExUnit.Case\n  \n  @fixtures_ebin \"test/fixtures/ebin\"\n  \n  test \"detects unused public functions\" do\n    config = %BeamDcd.Config{beam_paths: [@fixtures_ebin]}\n    {:ok, result} = BeamDcd.Analyzer.analyze(config)\n    \n    unused_mfas = Enum.map(result.unused_functions, fn f -> {f.module, f.function, f.arity} end)\n    \n    # Should be reported as unused\n    assert {TestFixtures.UsedFunctions, :public_unused, 0} in unused_mfas\n    assert {TestFixtures.GenServerImpl, :unused_public, 0} in unused_mfas\n    \n    # Should NOT be reported (used)\n    refute {TestFixtures.UsedFunctions, :public_used, 0} in unused_mfas\n    \n    # Should NOT be reported (GenServer callbacks)\n    refute {TestFixtures.GenServerImpl, :init, 1} in unused_mfas\n    refute {TestFixtures.GenServerImpl, :handle_call, 3} in unused_mfas\n  end\n  \n  test \"detects cross-module references\" do\n    config = %BeamDcd.Config{beam_paths: [@fixtures_ebin]}\n    {:ok, result} = BeamDcd.Analyzer.analyze(config)\n    \n    unused_mfas = Enum.map(result.unused_functions, fn f -> {f.module, f.function, f.arity} end)\n    \n    # Function called from another module should not be unused\n    refute {TestFixtures.UsedFunctions, :public_used, 0} in unused_mfas\n  end\n  \n  test \"detects fun captures\" do\n    config = %BeamDcd.Config{beam_paths: [@fixtures_ebin]}\n    {:ok, result} = BeamDcd.Analyzer.analyze(config)\n    \n    unused_mfas = Enum.map(result.unused_functions, fn f -> {f.module, f.function, f.arity} end)\n    \n    # Function captured as fun should not be unused\n    refute {TestFixtures.UsedFunctions, :public_used, 0} in unused_mfas\n  end\n  \n  test \"warns about dynamic dispatch\" do\n    config = %BeamDcd.Config{beam_paths: [@fixtures_ebin]}\n    {:ok, result} = BeamDcd.Analyzer.analyze(config)\n    \n    assert Enum.any?(result.summary.warnings, &String.contains?(&1, \"apply\"))\n  end\nend\n```",
+        "testStrategy": "Self-validation strategy:\n- Run BeamDcd on its own codebase, expect clean report\n- Known-answer tests with fixtures\n- Property-based tests for chunk parsing\n- Performance benchmarks with 500+ BEAM files\n- Cross-language tests (Elixir + Erlang fixtures)\n- Edge cases: stripped debug info, OTP 24+ make_fun3, protocol implementations",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create test fixtures directory structure and Elixir test modules",
+            "description": "Set up test/fixtures/elixir directory and create all Elixir fixture modules including used_functions.ex, genserver_impl.ex, cross_module_caller.ex, and dynamic_dispatch.ex",
+            "dependencies": [],
+            "details": "Create the directory structure test/fixtures/elixir/ and test/fixtures/ebin/. Implement five Elixir fixture modules:\n\n1. TestFixtures.UsedFunctions - mix of used/unused public functions and private functions\n2. TestFixtures.GenServerImpl - GenServer with behaviour callbacks and unused public functions\n3. TestFixtures.CrossModuleCaller - demonstrates cross-module function calls and fun captures\n4. TestFixtures.DynamicDispatch - demonstrates apply/3 usage for dynamic dispatch\n\nEach module should be designed to test specific detection scenarios: unused public functions, behaviour callback exclusion, cross-module references, function captures, and dynamic dispatch warnings.",
+            "status": "pending",
+            "testStrategy": "Manual verification that all fixture files are created with correct syntax. Run `elixirc` on each fixture file individually to ensure they compile without errors before integration into test_helper.exs"
+          },
+          {
+            "id": 2,
+            "title": "Create Erlang fixture module for cross-language testing",
+            "description": "Create test/fixtures/erlang directory and implement erlang_module.erl with exported used/unused functions to test Erlang BEAM file analysis",
+            "dependencies": [
+              1
+            ],
+            "details": "Create test/fixtures/erlang/erlang_module.erl with:\n- exported_used/0 function that should NOT be flagged as unused\n- exported_unused/0 function that should be flagged as unused\n\nThis tests the tool's ability to analyze both Elixir and Erlang BEAM files in the same project, ensuring the chunk parser and reference collector work correctly with Erlang's module naming conventions (no 'Elixir.' prefix) and calling conventions.",
+            "status": "pending",
+            "testStrategy": "Manually compile with erlc to verify syntax correctness. Check that the compiled BEAM file has proper debug_info chunks using :beam_lib.chunks/2"
+          },
+          {
+            "id": 3,
+            "title": "Update test_helper.exs with fixture compilation logic",
+            "description": "Enhance test/test_helper.exs to automatically compile all Elixir and Erlang fixture modules to test/fixtures/ebin before running tests",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Modify test_helper.exs to:\n1. Set Code.compiler_options(debug_info: true) to ensure debug_info chunks are present\n2. Use Kernel.ParallelCompiler.compile_to_path/2 to compile all Elixir fixtures from test/fixtures/elixir/*.ex to test/fixtures/ebin\n3. Use :compile.file/2 or System.cmd/3 with erlc to compile Erlang fixtures from test/fixtures/erlang/*.erl to test/fixtures/ebin\n4. Add error handling for compilation failures\n5. Ensure test/fixtures/ebin is created if it doesn't exist\n\nThis ensures fresh BEAM files are available for every test run with proper debug_info for abstract code analysis.",
+            "status": "pending",
+            "testStrategy": "Run `mix test` and verify that test/fixtures/ebin directory is populated with .beam files. Use :beam_lib.chunks/2 to verify each BEAM file contains debug_info, exports, and imports chunks"
+          },
+          {
+            "id": 4,
+            "title": "Create BeamDcd.IntegrationTest with unused function detection tests",
+            "description": "Implement comprehensive integration test suite covering unused function detection, cross-module references, function captures, and behaviour callback exclusion",
+            "dependencies": [
+              3
+            ],
+            "details": "Create test/beam_dcd_integration_test.exs with test cases:\n\n1. 'detects unused public functions' - verify TestFixtures.UsedFunctions.public_unused/0 and TestFixtures.GenServerImpl.unused_public/0 are flagged as unused, while public_used/0 is not\n\n2. 'excludes behaviour callbacks from unused detection' - verify GenServer callbacks (init/1, handle_call/3, handle_cast/2) are NOT flagged as unused\n\n3. 'detects cross-module references' - verify functions called from CrossModuleCaller are not flagged as unused\n\n4. 'detects fun captures' - verify functions captured with &Module.function/arity syntax are not flagged as unused\n\n5. 'warns about dynamic dispatch' - verify apply/3 usage generates warnings in analysis results\n\nEach test should instantiate BeamDcd.Config with beam_paths: [\"test/fixtures/ebin\"], call BeamDcd.Analyzer.analyze/1, and assert on the returned unused_functions list and warnings.",
+            "status": "pending",
+            "testStrategy": "Run `mix test test/beam_dcd_integration_test.exs` and verify all assertions pass. This is self-validating as the tests check the actual analysis output against known-answer fixtures. Add property-based tests if time permits to test edge cases like empty modules or modules with only private functions"
+          },
+          {
+            "id": 5,
+            "title": "Create performance and edge case test suite",
+            "description": "Implement performance benchmarks and edge case tests including stripped debug info, large module sets, and self-analysis validation",
+            "dependencies": [
+              4
+            ],
+            "details": "Extend test/beam_dcd_integration_test.exs or create test/beam_dcd_performance_test.exs with:\n\n1. Performance test - analyze 500+ BEAM files (use Mix project's own dependencies or generate fixtures) and assert completion in <10 seconds\n\n2. Self-analysis test - run BeamDcd on its own compiled lib directory and expect clean report (no unused functions)\n\n3. Edge case: stripped debug info - create a fixture compiled without debug_info and verify graceful degradation (falls back to import table analysis)\n\n4. Edge case: empty module - module with no exports should not crash\n\n5. Edge case: module with only private functions - should report zero exports\n\n6. Verify summary statistics (total_exports_analyzed, total_unused, modules_analyzed) are calculated correctly\n\nTag performance tests with @tag :performance to allow skipping in CI if needed.",
+            "status": "pending",
+            "testStrategy": "Run `mix test --include performance` to execute all tests including performance benchmarks. Use :timer.tc/1 to measure execution time. For self-analysis test, compile the BeamDcd project itself and run the analyzer on lib/ directory, expecting zero unused functions (validates that the tool works correctly on real-world code)"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Add source file mapping and compile info extraction",
+        "description": "Implement module to extract source file paths and line numbers from BEAM compile chunk for accurate reporting",
+        "details": "Create BeamDcd.SourceMapper to extract source information from BEAM files.\n\nImplementation:\n```elixir\ndefmodule BeamDcd.SourceMapper do\n  @type source_info :: %{\n    file: Path.t() | nil,\n    line: non_neg_integer() | nil,\n    compile_options: keyword()\n  }\n  \n  @spec get_source_info(Path.t()) :: {:ok, source_info()} | {:error, term()}\n  def get_source_info(beam_file) do\n    case :beam_lib.chunks(beam_file, [:compile_info]) do\n      {:ok, {_module, [{:compile_info, compile_info}]}} ->\n        source_file = \n          compile_info\n          |> Keyword.get(:source)\n          |> to_string_if_charlist()\n          |> make_relative_if_possible()\n        \n        info = %{\n          file: source_file,\n          line: nil,  # Line info requires abstract code or debug_info\n          compile_options: Keyword.get(compile_info, :options, [])\n        }\n        \n        {:ok, info}\n        \n      {:error, _} = error ->\n        error\n    end\n  end\n  \n  @spec get_function_line(Path.t(), atom(), non_neg_integer()) :: {:ok, non_neg_integer()} | {:error, term()}\n  def get_function_line(beam_file, function, arity) do\n    # Try to get line number from abstract code\n    case :beam_lib.chunks(beam_file, [:abstract_code]) do\n      {:ok, {_module, [{:abstract_code, {:raw_abstract_v1, forms}}]}} ->\n        line = find_function_line_in_forms(forms, function, arity)\n        {:ok, line}\n        \n      _ ->\n        # Fall back to debug_info if available\n        case :beam_lib.chunks(beam_file, [:debug_info]) do\n          {:ok, {_module, [{:debug_info, {:debug_info_v1, _backend, metadata}}]}} ->\n            line = extract_line_from_debug_info(metadata, function, arity)\n            {:ok, line}\n          _ ->\n            {:error, :no_debug_info}\n        end\n    end\n  end\n  \n  defp find_function_line_in_forms(forms, function, arity) do\n    forms\n    |> Enum.find_value(fn\n      {:function, line, ^function, ^arity, _clauses} -> line\n      _ -> nil\n    end)\n  end\n  \n  defp to_string_if_charlist(value) when is_list(value) do\n    case :unicode.characters_to_binary(value) do\n      {:error, _, _} -> nil\n      binary -> binary\n    end\n  end\n  defp to_string_if_charlist(value), do: value\n  \n  defp make_relative_if_possible(nil), do: nil\n  defp make_relative_if_possible(path) do\n    cwd = File.cwd!()\n    case Path.relative_to(path, cwd) do\n      ^path -> path  # Path is not relative to cwd\n      relative -> relative\n    end\n  end\n  \n  defp extract_line_from_debug_info(_metadata, _function, _arity) do\n    # OTP 25+ debug_info format handling\n    nil\n  end\nend\n```\n\nIntegrate into BeamDcd.Analyzer to populate source_file and source_line in results.",
+        "testStrategy": "Unit tests:\n- Extract source file from compile_info chunk\n- Handle charlists vs binaries\n- Make paths relative to project root\n- Extract function line numbers from abstract code\n- Handle missing debug_info gracefully\n- Test with BEAM files compiled with/without debug_info\n- Verify paths displayed correctly in text formatter",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create BeamDcd.SourceMapper module skeleton with type definitions",
+            "description": "Create the base module file lib/beam_dcd/source_mapper.ex with module documentation, type definitions (@type source_info), and module structure",
+            "dependencies": [],
+            "details": "Create lib/beam_dcd/source_mapper.ex with the complete module skeleton including:\n- Module documentation explaining the purpose (extracting source file paths and line numbers from BEAM compile chunks)\n- @type source_info :: %{file: Path.t() | nil, line: non_neg_integer() | nil, compile_options: keyword()} type definition\n- @type mfa for function references\n- Empty function stubs for get_source_info/1 and get_function_line/3 with proper @spec annotations\n- Private function declarations for helper functions (to_string_if_charlist, make_relative_if_possible, find_function_line_in_forms, extract_line_from_debug_info)",
+            "status": "pending",
+            "testStrategy": "Verify module compiles without errors and dialyzer type checking passes"
+          },
+          {
+            "id": 2,
+            "title": "Implement get_source_info/1 to extract compile_info chunk data",
+            "description": "Implement the get_source_info/1 function that uses :beam_lib.chunks/2 to extract source file path and compile options from BEAM files",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement get_source_info/1 function that:\n- Uses :beam_lib.chunks(beam_file, [:compile_info]) to read the compile_info chunk\n- Extracts the :source field from compile_info keyword list\n- Converts charlists to binaries using to_string_if_charlist/1 helper\n- Makes paths relative to project root using make_relative_if_possible/1 helper\n- Extracts :options from compile_info for compile_options field\n- Returns {:ok, source_info} map with file, line (nil initially), and compile_options\n- Returns {:error, reason} on failure\n\nImplement helper functions:\n- to_string_if_charlist/1: Convert Erlang charlists to Elixir binaries using :unicode.characters_to_binary/1\n- make_relative_if_possible/1: Use Path.relative_to/2 with File.cwd!/0 to create relative paths",
+            "status": "pending",
+            "testStrategy": "Unit tests:\n- Compile test fixture module and verify source file path extraction\n- Test charlist to binary conversion\n- Test relative path generation from absolute paths\n- Test error handling for missing/corrupted BEAM files\n- Verify compile_options are correctly extracted"
+          },
+          {
+            "id": 3,
+            "title": "Implement get_function_line/3 with abstract_code chunk parsing",
+            "description": "Implement get_function_line/3 to extract function line numbers from abstract_code chunk using Erlang abstract syntax tree forms",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement get_function_line/3 function that:\n- Uses :beam_lib.chunks(beam_file, [:abstract_code]) to read abstract code\n- Handles the {:raw_abstract_v1, forms} structure\n- Calls find_function_line_in_forms/3 helper to search for matching function\n- Returns {:ok, line_number} when found\n- Falls back to debug_info chunk if abstract_code not available\n- Returns {:error, :no_debug_info} if neither chunk available\n\nImplement find_function_line_in_forms/3 helper:\n- Use Enum.find_value/2 to search through forms list\n- Pattern match {:function, line, function_name, arity, _clauses} tuples\n- Return line number when function and arity match\n- Return nil if not found in forms",
+            "status": "pending",
+            "testStrategy": "Unit tests:\n- Compile test module with debug_info (+debug_info flag) and verify line number extraction\n- Test with multiple functions in same module\n- Test pattern matching for exact function name and arity\n- Verify fallback behavior when abstract_code not present\n- Test private vs public function line extraction"
+          },
+          {
+            "id": 4,
+            "title": "Implement debug_info fallback for OTP 25+ format",
+            "description": "Add debug_info chunk parsing as fallback mechanism for BEAM files compiled without abstract_code but with debug_info",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement debug_info chunk parsing in get_function_line/3:\n- Use :beam_lib.chunks(beam_file, [:debug_info]) as fallback when abstract_code fails\n- Handle the {:debug_info_v1, backend, metadata} structure used in OTP 25+\n- Implement extract_line_from_debug_info/3 helper to parse metadata\n- For OTP 25+, the debug_info format may use :elixir_erl or :erlang_v1 backend\n- Extract line number information from the metadata map/structure\n- Return nil if line information cannot be extracted (graceful degradation)\n- Maintain backward compatibility with older OTP versions",
+            "status": "pending",
+            "testStrategy": "Unit tests:\n- Test with BEAM files compiled with only debug_info (no abstract_code)\n- Test with OTP 25+ debug_info format\n- Test graceful degradation when line info unavailable\n- Verify nil return doesn't crash the analysis pipeline\n- Test with both Elixir and Erlang compiled modules"
+          },
+          {
+            "id": 5,
+            "title": "Create test suite with fixture BEAM files and integration tests",
+            "description": "Create comprehensive test suite in test/beam_dcd/source_mapper_test.exs with fixture modules and integration tests for all SourceMapper functionality",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Create test/beam_dcd/source_mapper_test.exs with:\n- Test fixtures: Create test/fixtures/source_mapping directory\n- Compile fixture modules in setup with different compilation flags:\n  * simple_module.ex compiled with +debug_info\n  * no_debug_module.ex compiled without debug info\n  * multi_function_module.ex with multiple exported functions\n- Test get_source_info/1:\n  * Verify source file extraction from compile_info\n  * Test charlist vs binary handling\n  * Test relative path conversion\n  * Test with missing BEAM file returns error\n- Test get_function_line/3:\n  * Verify line number extraction from abstract_code\n  * Test with multiple functions, verify correct line returned\n  * Test fallback to debug_info\n  * Test missing function returns appropriate response\n- Integration tests: Test combined usage in realistic scenarios\n- Edge cases: Empty modules, generated code, protocol implementations",
+            "status": "pending",
+            "testStrategy": "Run full test suite with mix test. Verify:\n- All tests pass on OTP 24, 25, 26, 27\n- Code coverage > 90% for SourceMapper module\n- Tests run in isolation and can be run in any order\n- Fixture BEAM files are compiled during test setup\n- No hardcoded absolute paths in tests"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2026-02-18T02:19:38.103Z",
+      "updated": "2026-02-18T02:21:00.540Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
