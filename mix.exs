@@ -8,7 +8,8 @@ defmodule BeamDcd.MixProject do
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      escript: escript()
+      escript: escript(),
+      elixirc_paths: elixirc_paths(Mix.env())
     ]
   end
 
@@ -20,6 +21,9 @@ defmodule BeamDcd.MixProject do
   end
 
   # Run "mix help deps" to learn about dependencies.
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
   defp escript do
     [main_module: BeamDcd.CLI]
   end
