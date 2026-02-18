@@ -47,18 +47,19 @@ defmodule BeamDcd.SourceMapper do
   @spec build_source_map([Path.t()]) :: %{module() => String.t()}
   def build_source_map(beam_files) do
     beam_files
-    |> Task.async_stream(fn beam_file ->
-      beam_file = to_charlist_path(beam_file)
+    |> Task.async_stream(
+      fn beam_file ->
+        beam_file = to_charlist_path(beam_file)
 
-      case :beam_lib.chunks(beam_file, [:compile_info]) do
-        {:ok, {module, [{:compile_info, info}]}} ->
-          source = Keyword.get(info, :source)
-          if source, do: {module, to_string(source)}, else: nil
+        case :beam_lib.chunks(beam_file, [:compile_info]) do
+          {:ok, {module, [{:compile_info, info}]}} ->
+            source = Keyword.get(info, :source)
+            if source, do: {module, to_string(source)}, else: nil
 
-        _ ->
-          nil
-      end
-    end, timeout: 10_000, ordered: false)
+          _ ->
+            nil
+        end
+      end, timeout: 10_000, ordered: false)
     |> Enum.reduce(%{}, fn
       {:ok, {module, source}}, acc -> Map.put(acc, module, source)
       _, acc -> acc

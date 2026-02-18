@@ -105,6 +105,7 @@ defmodule BeamDcd.Formatter do
     unused
     |> Enum.map(fn info ->
       file = info.source_file || "unknown"
+
       "::warning file=#{file}::Unused public function: #{SourceMapper.format_module_name(info.module)}.#{info.function}/#{info.arity}"
     end)
     |> Enum.join("\n")
@@ -139,7 +140,8 @@ defmodule BeamDcd.Formatter do
                 "ruleId" => "BEAM001",
                 "level" => "warning",
                 "message" => %{
-                  "text" => "Unused public function: #{SourceMapper.format_module_name(info.module)}.#{info.function}/#{info.arity}"
+                  "text" =>
+                    "Unused public function: #{SourceMapper.format_module_name(info.module)}.#{info.function}/#{info.arity}"
                 },
                 "locations" => [
                   %{

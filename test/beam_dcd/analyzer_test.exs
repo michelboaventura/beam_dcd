@@ -77,8 +77,8 @@ defmodule BeamDcd.AnalyzerTest do
       assert {:ok, result} = Analyzer.analyze(config)
 
       refute Enum.any?(result.unused_functions, fn info ->
-        info.module == BeamDcd.ChunkParser
-      end)
+               info.module == BeamDcd.ChunkParser
+             end)
     end
 
     test "ignore_modules supports regex patterns" do
@@ -91,8 +91,8 @@ defmodule BeamDcd.AnalyzerTest do
       assert {:ok, result} = Analyzer.analyze(config)
 
       refute Enum.any?(result.unused_functions, fn info ->
-        info.module == BeamDcd.ChunkParser
-      end)
+               info.module == BeamDcd.ChunkParser
+             end)
     end
   end
 end

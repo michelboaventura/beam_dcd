@@ -21,36 +21,68 @@ defmodule BeamDcd.EntrypointDetector do
   # Known OTP and framework behaviour callbacks
   @otp_behaviour_callbacks %{
     :gen_server => [
-      {:init, 1}, {:handle_call, 3}, {:handle_cast, 2}, {:handle_info, 2},
-      {:terminate, 2}, {:code_change, 3}, {:format_status, 1}, {:format_status, 2}
+      {:init, 1},
+      {:handle_call, 3},
+      {:handle_cast, 2},
+      {:handle_info, 2},
+      {:terminate, 2},
+      {:code_change, 3},
+      {:format_status, 1},
+      {:format_status, 2}
     ],
     :gen_statem => [
-      {:init, 1}, {:callback_mode, 0}, {:terminate, 3}, {:code_change, 4},
-      {:format_status, 1}, {:format_status, 2}
+      {:init, 1},
+      {:callback_mode, 0},
+      {:terminate, 3},
+      {:code_change, 4},
+      {:format_status, 1},
+      {:format_status, 2}
     ],
     :gen_event => [
-      {:init, 1}, {:handle_event, 2}, {:handle_call, 2}, {:handle_info, 2},
-      {:terminate, 2}, {:code_change, 3}, {:format_status, 2}
+      {:init, 1},
+      {:handle_event, 2},
+      {:handle_call, 2},
+      {:handle_info, 2},
+      {:terminate, 2},
+      {:code_change, 3},
+      {:format_status, 2}
     ],
     :supervisor => [{:init, 1}],
     :application => [{:start, 2}, {:stop, 1}, {:prep_stop, 1}, {:config_change, 3}],
     GenServer => [
-      {:init, 1}, {:handle_call, 3}, {:handle_cast, 2}, {:handle_info, 2},
-      {:terminate, 2}, {:code_change, 3}, {:format_status, 1}, {:format_status, 2},
+      {:init, 1},
+      {:handle_call, 3},
+      {:handle_cast, 2},
+      {:handle_info, 2},
+      {:terminate, 2},
+      {:code_change, 3},
+      {:format_status, 1},
+      {:format_status, 2},
       {:handle_continue, 2}
     ],
     Supervisor => [{:init, 1}],
     Application => [{:start, 2}, {:stop, 1}, {:prep_stop, 1}, {:config_change, 3}],
     Phoenix.LiveView => [
-      {:mount, 3}, {:render, 1}, {:handle_event, 3}, {:handle_params, 3},
-      {:handle_info, 2}, {:handle_async, 3}
+      {:mount, 3},
+      {:render, 1},
+      {:handle_event, 3},
+      {:handle_params, 3},
+      {:handle_info, 2},
+      {:handle_async, 3}
     ],
     Phoenix.LiveComponent => [
-      {:mount, 1}, {:update, 2}, {:render, 1}, {:handle_event, 3},
-      {:preload, 1}, {:update_many, 1}
+      {:mount, 1},
+      {:update, 2},
+      {:render, 1},
+      {:handle_event, 3},
+      {:preload, 1},
+      {:update_many, 1}
     ],
     Phoenix.Channel => [
-      {:join, 3}, {:handle_in, 3}, {:handle_info, 2}, {:handle_out, 3},
+      {:join, 3},
+      {:handle_in, 3},
+      {:handle_info, 2},
+      {:handle_out, 3},
       {:terminate, 2}
     ],
     Plug => [{:init, 1}, {:call, 2}],

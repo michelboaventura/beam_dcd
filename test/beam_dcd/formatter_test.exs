@@ -5,8 +5,18 @@ defmodule BeamDcd.FormatterTest do
 
   @sample_result %{
     unused_functions: [
-      %{module: :"Elixir.MyApp.Accounts", function: :get_user_by_token, arity: 1, source_file: "lib/my_app/accounts.ex"},
-      %{module: :"Elixir.MyApp.Accounts", function: :deprecated_auth_check, arity: 2, source_file: "lib/my_app/accounts.ex"},
+      %{
+        module: :"Elixir.MyApp.Accounts",
+        function: :get_user_by_token,
+        arity: 1,
+        source_file: "lib/my_app/accounts.ex"
+      },
+      %{
+        module: :"Elixir.MyApp.Accounts",
+        function: :deprecated_auth_check,
+        arity: 2,
+        source_file: "lib/my_app/accounts.ex"
+      },
       %{module: :"Elixir.MyApp.Helpers", function: :format_legacy_date, arity: 1, source_file: "lib/my_app/helpers.ex"}
     ],
     summary: %{
@@ -80,8 +90,8 @@ defmodule BeamDcd.FormatterTest do
       assert length(lines) == 3
 
       assert Enum.all?(lines, fn line ->
-        String.starts_with?(line, "::warning file=")
-      end)
+               String.starts_with?(line, "::warning file=")
+             end)
     end
 
     test "includes function details" do

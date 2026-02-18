@@ -63,6 +63,7 @@ defmodule BeamDcd.Analyzer do
         |> Enum.reject(fn mfa -> MapSet.member?(all_used, mfa) end)
         |> Enum.map(fn {mod, fun, arity} ->
           source = Map.get(source_map, mod)
+
           relative_source =
             if source, do: SourceMapper.relative_source_path(source, project_root), else: nil
 
@@ -135,14 +136,16 @@ defmodule BeamDcd.Analyzer do
 
   defp collect_all_exports(beam_files) do
     beam_files
-    |> Task.async_stream(fn beam_file ->
-      case ChunkParser.parse_all(beam_file) do
-        {:ok, %{module: module, exports: exports, attributes: attributes}} ->
-          {module, %{exports: exports, attributes: attributes}}
-        {:error, _} ->
-          nil
-      end
-    end, timeout: 30_000, ordered: false)
+    |> Task.async_stream(
+      fn beam_file ->
+        case ChunkParser.parse_all(beam_file) do
+          {:ok, %{module: module, exports: exports, attributes: attributes}} ->
+            {module, %{exports: exports, attributes: attributes}}
+
+          {:error, _} ->
+            nil
+        end
+      end, timeout: 30_000, ordered: false)
     |> Enum.reduce(%{}, fn
       {:ok, {module, data}}, acc -> Map.put(acc, module, data)
       _, acc -> acc
@@ -166,6 +169,13 @@ defmodule BeamDcd.Analyzer do
   defp ignored_function?({mod, fun, arity}, ignore_list) do
     Enum.any?(ignore_list, fn
       {^mod, ^fun, ^arity} -> true
+      {:_, ^fun, ^arity} -> true
+      {^mod, :_, ^arity} -> true
+      {^mod, ^fun, :_} -> true
+      {:_, :_, ^arity} -> true
+      {:_, ^fun, :_} -> true
+      {^mod, :_, :_} -> true
+      {:_, :_, :_} -> true
       _ -> false
     end)
   end

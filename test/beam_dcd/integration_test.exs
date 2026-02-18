@@ -112,6 +112,34 @@ defmodule BeamDcd.IntegrationTest do
       refute {TestFixtures.UsedFunctions, :public_unused, 0} in unused_names
     end
 
+    test "ignore_functions with :_ wildcard filters across all modules" do
+      config = %Config{
+        beam_paths: [@fixture_ebin],
+        exclude_deps: false,
+        ignore_functions: [{:_, :orphan_a, 0}]
+      }
+
+      assert {:ok, result} = Analyzer.analyze(config)
+      unused_names = for info <- result.unused_functions, do: {info.module, info.function, info.arity}
+
+      refute {TestFixtures.NoExternalCallers, :orphan_a, 0} in unused_names
+      # Other functions should still be reported
+      assert {TestFixtures.NoExternalCallers, :orphan_b, 0} in unused_names
+    end
+
+    test "ignore_functions with :_ wildcard on arity" do
+      config = %Config{
+        beam_paths: [@fixture_ebin],
+        exclude_deps: false,
+        ignore_functions: [{TestFixtures.NoExternalCallers, :_, :_}]
+      }
+
+      assert {:ok, result} = Analyzer.analyze(config)
+      unused_modules = for info <- result.unused_functions, do: info.module
+
+      refute TestFixtures.NoExternalCallers in unused_modules
+    end
+
     test "extra_entrypoints config works" do
       config = %Config{
         beam_paths: [@fixture_ebin],

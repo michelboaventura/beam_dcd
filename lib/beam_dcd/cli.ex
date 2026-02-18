@@ -37,7 +37,9 @@ defmodule BeamDcd.CLI do
 
     config =
       case Config.load(config_path) do
-        {:ok, config} -> config
+        {:ok, config} ->
+          config
+
         {:error, reason} ->
           IO.puts(:stderr, "Error loading config: #{reason}")
           %Config{}
