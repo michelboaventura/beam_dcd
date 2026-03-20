@@ -115,23 +115,23 @@ defmodule BeamDcd.EntrypointDetectorTest do
     end
   end
 
-  describe "is_entrypoint?/3" do
+  describe "entrypoint?/3" do
     test "returns true for compiler-generated" do
-      assert EntrypointDetector.is_entrypoint?({M, :module_info, 0}, [], [])
+      assert EntrypointDetector.entrypoint?({M, :module_info, 0}, [], [])
     end
 
     test "returns true for behaviour callbacks" do
       attrs = [behaviour: [GenServer]]
-      assert EntrypointDetector.is_entrypoint?({M, :init, 1}, attrs, [])
+      assert EntrypointDetector.entrypoint?({M, :init, 1}, attrs, [])
     end
 
     test "returns true for extra entrypoints" do
       extra = [{M, :custom, 2}]
-      assert EntrypointDetector.is_entrypoint?({M, :custom, 2}, [], extra)
+      assert EntrypointDetector.entrypoint?({M, :custom, 2}, [], extra)
     end
 
     test "returns false for regular functions" do
-      refute EntrypointDetector.is_entrypoint?({M, :regular, 1}, [], [])
+      refute EntrypointDetector.entrypoint?({M, :regular, 1}, [], [])
     end
   end
 end

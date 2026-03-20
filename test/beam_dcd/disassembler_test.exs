@@ -8,7 +8,7 @@ defmodule BeamDcd.DisassemblerTest do
       beam_file = beam_path(BeamDcd.ChunkParser)
       assert {:ok, BeamDcd.ChunkParser, references} = Disassembler.extract_references(beam_file)
       assert is_list(references)
-      assert length(references) > 0
+      assert references != []
 
       # ChunkParser calls :beam_lib.chunks/2
       assert {:beam_lib, :chunks, 2} in references

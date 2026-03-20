@@ -41,7 +41,7 @@ defmodule BeamDcd.CLITest do
           BeamDcd.CLI.main(["_build/test/lib/beam_dcd/ebin", "--format", "json"])
         end)
 
-      assert {:ok, _} = Jason.decode(output)
+      assert {:ok, _} = JSON.decode(output)
     end
   end
 end

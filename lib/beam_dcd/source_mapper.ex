@@ -53,13 +53,15 @@ defmodule BeamDcd.SourceMapper do
 
         case :beam_lib.chunks(beam_file, [:compile_info]) do
           {:ok, {module, [{:compile_info, info}]}} ->
-            source = Keyword.get(info, :source)
-            if source, do: {module, to_string(source)}, else: nil
+            get_source(info, module)
 
           _ ->
             nil
         end
-      end, timeout: 10_000, ordered: false)
+      end,
+      timeout: 10_000,
+      ordered: false
+    )
     |> Enum.reduce(%{}, fn
       {:ok, {module, source}}, acc -> Map.put(acc, module, source)
       _, acc -> acc
@@ -73,4 +75,14 @@ defmodule BeamDcd.SourceMapper do
 
   defp to_charlist_path(path) when is_list(path), do: path
   defp to_charlist_path(path) when is_binary(path), do: String.to_charlist(path)
+
+  defp get_source(info, module) do
+    source = Keyword.get(info, :source)
+
+    if source do
+      {module, to_string(source)}
+    else
+      nil
+    end
+  end
 end

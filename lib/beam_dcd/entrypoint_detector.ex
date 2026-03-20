@@ -117,20 +117,20 @@ defmodule BeamDcd.EntrypointDetector do
     |> Enum.uniq()
   end
 
-  @spec is_entrypoint?(mfa_tuple(), keyword(), [mfa_tuple()]) :: boolean()
-  def is_entrypoint?({_mod, fun, arity} = mfa, attributes, extra_entrypoints) do
+  @spec entrypoint?(mfa_tuple(), keyword(), [mfa_tuple()]) :: boolean()
+  def entrypoint?({_mod, fun, arity} = mfa, attributes, extra_entrypoints) do
     compiler_generated?(mfa) or
-      is_on_load?(fun, arity, attributes) or
-      is_behaviour_callback?(fun, arity, attributes) or
+      on_load?(fun, arity, attributes) or
+      behaviour_callback?(fun, arity, attributes) or
       mfa in extra_entrypoints
   end
 
   @spec filter_entrypoints([mfa_tuple()], keyword(), [mfa_tuple()]) :: [mfa_tuple()]
   def filter_entrypoints(exports, attributes, extra_entrypoints \\ []) do
-    Enum.reject(exports, &is_entrypoint?(&1, attributes, extra_entrypoints))
+    Enum.reject(exports, &entrypoint?(&1, attributes, extra_entrypoints))
   end
 
-  defp is_on_load?(function, arity, attributes) do
+  defp on_load?(function, arity, attributes) do
     on_load = Keyword.get(attributes, :on_load, [])
 
     case on_load do
@@ -140,7 +140,7 @@ defmodule BeamDcd.EntrypointDetector do
     end
   end
 
-  defp is_behaviour_callback?(function, arity, attributes) do
+  defp behaviour_callback?(function, arity, attributes) do
     behaviours = detect_behaviours(attributes)
     callbacks = get_behaviour_callbacks(behaviours)
     {function, arity} in callbacks

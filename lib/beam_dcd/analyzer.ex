@@ -5,7 +5,7 @@ defmodule BeamDcd.Analyzer do
   Phase 3 — compute unused functions.
   """
 
-  alias BeamDcd.{ChunkParser, ReferenceCollector, EntrypointDetector, SourceMapper, Config}
+  alias BeamDcd.{ChunkParser, Config, EntrypointDetector, ReferenceCollector, SourceMapper}
 
   @type mfa_info :: %{
           module: module(),
@@ -64,8 +64,7 @@ defmodule BeamDcd.Analyzer do
         |> Enum.map(fn {mod, fun, arity} ->
           source = Map.get(source_map, mod)
 
-          relative_source =
-            if source, do: SourceMapper.relative_source_path(source, project_root), else: nil
+          relative_source = get_relative_source(source, project_root)
 
           %{
             module: mod,
@@ -98,6 +97,12 @@ defmodule BeamDcd.Analyzer do
 
     {:ok, result}
   end
+
+  defp get_relative_source(source, _project_root) when source in [false, nil],
+    do: nil
+
+  defp get_relative_source(source, project_root),
+    do: SourceMapper.relative_source_path(source, project_root)
 
   defp discover_beam_files(%Config{beam_paths: beam_paths, include_test: include_test}) do
     base_files =
@@ -145,7 +150,10 @@ defmodule BeamDcd.Analyzer do
           {:error, _} ->
             nil
         end
-      end, timeout: 30_000, ordered: false)
+      end,
+      timeout: 30_000,
+      ordered: false
+    )
     |> Enum.reduce(%{}, fn
       {:ok, {module, data}}, acc -> Map.put(acc, module, data)
       _, acc -> acc

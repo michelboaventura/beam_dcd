@@ -9,7 +9,15 @@ defmodule BeamDcd.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       escript: escript(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      dialyzer: [
+        plt_add_apps: [:mix, :ex_unit],
+        flags: [
+          :error_handling,
+          :underspecs
+        ],
+        ignore_warnings: ".dialyzer_ignore.exs"
+      ]
     ]
   end
 
@@ -30,7 +38,9 @@ defmodule BeamDcd.MixProject do
 
   defp deps do
     [
-      {:jason, "~> 1.4"}
+      {:credo, "~> 1.2", only: [:test, :dev], runtime: false},
+      {:dialyxir, "~> 1.1", only: [:test, :dev], runtime: false},
+      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
     ]
   end
 end

@@ -5,7 +5,7 @@ defmodule BeamDcd.ReferenceCollector do
   Supports parallel batch processing via `Task.async_stream`.
   """
 
-  alias BeamDcd.{ChunkParser, Disassembler, AbstractAnalyzer}
+  alias BeamDcd.{AbstractAnalyzer, ChunkParser, Disassembler}
 
   @type mfa_tuple :: {module(), atom(), arity()}
 

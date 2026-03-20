@@ -20,14 +20,6 @@ defmodule BeamDcd.Disassembler do
 
         {:ok, module, references}
 
-      {:beam_file, module, _exports, _attrs, functions} ->
-        references =
-          functions
-          |> Enum.flat_map(&scan_function/1)
-          |> Enum.uniq()
-
-        {:ok, module, references}
-
       {:error, :beam_lib, reason} ->
         {:error, reason}
 

@@ -66,7 +66,7 @@ defmodule BeamDcd.FormatterTest do
   describe "format/2 with :json" do
     test "produces valid JSON" do
       output = Formatter.format(@sample_result, :json)
-      assert {:ok, decoded} = Jason.decode(output)
+      assert {:ok, decoded} = JSON.decode(output)
       assert is_list(decoded["unused_functions"])
       assert length(decoded["unused_functions"]) == 3
       assert decoded["summary"]["total_unused"] == 3
@@ -74,7 +74,7 @@ defmodule BeamDcd.FormatterTest do
 
     test "includes all fields" do
       output = Formatter.format(@sample_result, :json)
-      {:ok, decoded} = Jason.decode(output)
+      {:ok, decoded} = JSON.decode(output)
       first = List.first(decoded["unused_functions"])
       assert Map.has_key?(first, "module")
       assert Map.has_key?(first, "function")
@@ -104,7 +104,7 @@ defmodule BeamDcd.FormatterTest do
   describe "format/2 with :sarif" do
     test "produces valid SARIF JSON" do
       output = Formatter.format(@sample_result, :sarif)
-      assert {:ok, decoded} = Jason.decode(output)
+      assert {:ok, decoded} = JSON.decode(output)
       assert decoded["version"] == "2.1.0"
       assert length(decoded["runs"]) == 1
 

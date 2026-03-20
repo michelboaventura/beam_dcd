@@ -9,7 +9,7 @@ defmodule BeamDcd.AbstractAnalyzerTest do
       assert {:ok, references, warnings} = AbstractAnalyzer.extract_references(beam_file)
       assert is_list(references)
       assert is_list(warnings)
-      assert length(references) > 0
+      assert references != []
 
       # ChunkParser calls :beam_lib.chunks/2
       assert {:beam_lib, :chunks, 2} in references

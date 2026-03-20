@@ -1,7 +1,7 @@
 defmodule BeamDcd.IntegrationTest do
   use ExUnit.Case
 
-  alias BeamDcd.{Analyzer, Config, Formatter, ChunkParser, Disassembler, ReferenceCollector, EntrypointDetector}
+  alias BeamDcd.{Analyzer, ChunkParser, Config, Disassembler, EntrypointDetector, Formatter, ReferenceCollector}
 
   @fixture_ebin "_build/test/lib/beam_dcd/ebin"
 
@@ -171,7 +171,7 @@ defmodule BeamDcd.IntegrationTest do
       {:ok, result} = Analyzer.analyze(config)
       output = Formatter.format(result, :json)
 
-      assert {:ok, decoded} = Jason.decode(output)
+      assert {:ok, decoded} = JSON.decode(output)
       assert is_list(decoded["unused_functions"])
       assert is_map(decoded["summary"])
     end
@@ -191,7 +191,7 @@ defmodule BeamDcd.IntegrationTest do
       {:ok, result} = Analyzer.analyze(config)
       output = Formatter.format(result, :sarif)
 
-      assert {:ok, decoded} = Jason.decode(output)
+      assert {:ok, decoded} = JSON.decode(output)
       assert decoded["version"] == "2.1.0"
     end
   end

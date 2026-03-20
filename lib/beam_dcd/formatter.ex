@@ -6,7 +6,7 @@ defmodule BeamDcd.Formatter do
 
   alias BeamDcd.SourceMapper
 
-  @spec format(map(), :text | :json | :github | :sarif) :: String.t()
+  @spec format(%{:unused_functions => any(), atom() => any()}, :text | :json | :github | :sarif) :: String.t()
   def format(result, format \\ :text)
 
   def format(result, :text), do: format_text(result)
@@ -38,12 +38,11 @@ defmodule BeamDcd.Formatter do
 
     module_sections =
       grouped
-      |> Enum.map(fn {{source, module}, functions} ->
+      |> Enum.map_join("\n\n", fn {{source, module}, functions} ->
         header = "#{source} (#{SourceMapper.format_module_name(module)})"
         funcs = format_function_tree(functions)
         "#{header}\n#{funcs}"
       end)
-      |> Enum.join("\n\n")
 
     modules_count = length(grouped)
 
@@ -62,17 +61,16 @@ defmodule BeamDcd.Formatter do
     functions
     |> Enum.sort_by(fn info -> {info.function, info.arity} end)
     |> Enum.with_index()
-    |> Enum.map(fn {info, idx} ->
+    |> Enum.map_join("\n", fn {info, idx} ->
       connector = if idx == length(functions) - 1, do: "└──", else: "├──"
       "  #{connector} #{info.function}/#{info.arity}"
     end)
-    |> Enum.join("\n")
   end
 
   defp format_warnings_text([]), do: ""
 
   defp format_warnings_text(warnings) do
-    warning_lines = Enum.map(warnings, fn w -> "  ⚠ #{w}" end) |> Enum.join("\n")
+    warning_lines = Enum.map_join(warnings, "\n", fn w -> "  ⚠ #{w}" end)
     "\n\nWarnings:\n#{warning_lines}"
   end
 
@@ -96,19 +94,18 @@ defmodule BeamDcd.Formatter do
       }
     }
 
-    Jason.encode!(data, pretty: true)
+    JSON.encode!(data)
   end
 
   # -- GitHub Actions format --
 
   defp format_github(%{unused_functions: unused}) do
     unused
-    |> Enum.map(fn info ->
+    |> Enum.map_join("\n", fn info ->
       file = info.source_file || "unknown"
 
       "::warning file=#{file}::Unused public function: #{SourceMapper.format_module_name(info.module)}.#{info.function}/#{info.arity}"
     end)
-    |> Enum.join("\n")
   end
 
   # -- SARIF format --
@@ -158,7 +155,7 @@ defmodule BeamDcd.Formatter do
       ]
     }
 
-    Jason.encode!(sarif, pretty: true)
+    JSON.encode!(sarif)
   end
 
   defp plural(1), do: ""
